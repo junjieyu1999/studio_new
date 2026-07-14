@@ -28,7 +28,7 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
       <header className="flex items-center justify-between px-6 py-5 sm:px-10">
         <Link
           href="/"
-          className="text-xs font-medium tracking-[0.25em] text-[#1c1a17]/70 hover:text-[#1c1a17]"
+          className="font-mono text-[0.68rem] tracking-[0.22em] text-[#1c1a17]/70 hover:text-[#1c1a17]"
         >
           ← BACK TO GALLERY
         </Link>
@@ -72,10 +72,10 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
         </div>
 
         <div className="pt-2">
-          <h1 className="text-3xl font-light tracking-tight sm:text-4xl">
+          <h1 className="font-serif text-4xl font-light tracking-tight sm:text-5xl">
             {artwork.title}
           </h1>
-          <p className="mt-2 text-sm text-[#1c1a17]/60">
+          <p className="mt-3 text-sm text-[#1c1a17]/60">
             {artwork.year} · {artwork.medium} · {artwork.dimensions}
           </p>
 
@@ -99,7 +99,7 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
 
           {artwork.inspiration && (
             <div className="mt-8">
-              <h2 className="text-xs font-semibold tracking-[0.2em] text-[#1c1a17]/50">
+              <h2 className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-[#8b6842]">
                 INSPIRATION
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-[#1c1a17]/80">
@@ -110,7 +110,7 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
 
           {artwork.process && (
             <div className="mt-8">
-              <h2 className="text-xs font-semibold tracking-[0.2em] text-[#1c1a17]/50">
+              <h2 className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-[#8b6842]">
                 PROCESS
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-[#1c1a17]/80">

@@ -10,6 +10,9 @@ const MAX_HEIGHT = 2.6;
 const MIN_WIDTH = 1.5;
 const MAX_WIDTH = 3.4;
 
+// Dark antique-gold frame — reads golden under the warm gallery lights.
+const FRAME_COLOR = "#8a6a2f";
+
 function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
   const texture = useTexture(artwork.image_url as string);
   const { width, height } = useMemo(() => {
@@ -24,16 +27,21 @@ function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
       w = MIN_WIDTH;
       h = w / aspect;
     }
+    // Keep the top edge predictable so the title/label sit consistently.
+    if (h > MAX_HEIGHT) {
+      h = MAX_HEIGHT;
+      w = h * aspect;
+    }
     return { width: w, height: h };
   }, [texture]);
 
   return (
     <group>
-      <mesh position={[0, 0, -0.03]}>
-        <boxGeometry args={[width + 0.18, height + 0.18, 0.06]} />
-        <meshStandardMaterial color="#1c1a17" roughness={0.6} />
+      <mesh position={[0, 0, -0.06]}>
+        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
+        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
       </mesh>
-      <mesh position={[0, 0, 0.001]}>
+      <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={texture} roughness={0.85} />
       </mesh>
@@ -47,11 +55,11 @@ function GradientFallback({ artwork }: { artwork: Artwork }) {
 
   return (
     <group>
-      <mesh position={[0, 0, -0.03]}>
-        <boxGeometry args={[width + 0.18, height + 0.18, 0.06]} />
-        <meshStandardMaterial color="#1c1a17" roughness={0.6} />
+      <mesh position={[0, 0, -0.06]}>
+        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
+        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
       </mesh>
-      <mesh position={[0, 0, 0.001]}>
+      <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial color="#8a8a8a" roughness={0.9} />
       </mesh>
@@ -99,21 +107,24 @@ export function Painting({ artwork, position, rotationY }: PaintingProps) {
         )}
       </Suspense>
 
+      {/* Title + details above the painting (light text for dark walls) */}
       <Suspense fallback={null}>
         <Text
-          position={[0, -1.55, 0.02]}
-          fontSize={0.14}
-          color={hovered ? "#e8c874" : "#f5f2ea"}
+          position={[0, 1.62, 0.02]}
+          fontSize={0.16}
+          color={hovered ? "#e8c874" : "#f2ece0"}
           anchorX="center"
-          anchorY="top"
-          maxWidth={2.6}
+          anchorY="bottom"
+          maxWidth={3.2}
+          textAlign="center"
         >
           {artwork.title}
         </Text>
         <Text
-          position={[0, -1.78, 0.02]}
-          fontSize={0.09}
-          color="#b8b3a8"
+          position={[0, 1.5, 0.02]}
+          fontSize={0.088}
+          letterSpacing={0.02}
+          color="#b6ad9d"
           anchorX="center"
           anchorY="top"
         >
