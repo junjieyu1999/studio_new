@@ -24,7 +24,9 @@ export function GuidedNavControls() {
   const atEnd = pos.total > 0 && pos.index >= pos.total - 1;
 
   return (
-    <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
+    // On phones this sits above the walk pad (which occupies the bottom-left);
+    // on larger screens there's room for it on the bottom row.
+    <div className="pointer-events-none absolute bottom-32 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 sm:bottom-6">
       <button
         onClick={stepBackward}
         disabled={atStart}

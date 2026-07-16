@@ -43,7 +43,13 @@ export function ContactWidget() {
   }, [open]);
 
   return (
-    <div ref={ref} className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    // pointer-events-none is critical: this container is as wide/tall as the
+    // (hidden) card, and would otherwise swallow taps meant for controls
+    // underneath it — e.g. the gallery walk pad. Children opt back in.
+    <div
+      ref={ref}
+      className="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3"
+    >
       {/* Expanding card */}
       <div
         className={`w-64 origin-bottom-right rounded-2xl border border-white/10 bg-[#1c1a17]/95 p-3 text-[#f2ece0] shadow-2xl backdrop-blur-md transition-all duration-200 ${
@@ -99,7 +105,7 @@ export function ContactWidget() {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={open ? "Close contact options" : "Contact me"}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-[#8b6842] text-white shadow-lg shadow-black/25 transition hover:scale-105 hover:bg-[#7a5c39] active:scale-95"
+        className="pointer-events-auto flex h-14 w-14 touch-none select-none items-center justify-center rounded-full bg-[#8b6842] text-white shadow-lg shadow-black/25 transition hover:scale-105 hover:bg-[#7a5c39] active:scale-95"
       >
         {open ? (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6">
