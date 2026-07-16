@@ -34,6 +34,8 @@ export function WalkControls({
   useEffect(() => {
     const el = gl.domElement;
 
+    // NOTE: the canvas needs `touch-action: none` for drag-to-look to work on
+    // touch — that's set via the `.gallery-stage canvas` rule in globals.css.
     const onPointerDown = (e: PointerEvent) => {
       dragging.current = true;
       last.current = { x: e.clientX, y: e.clientY };
@@ -56,12 +58,14 @@ export function WalkControls({
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
     el.addEventListener("pointerleave", onPointerUp);
 
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
       el.removeEventListener("pointerleave", onPointerUp);
     };
   }, [gl]);

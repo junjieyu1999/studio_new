@@ -11,7 +11,7 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
   const [showHint, setShowHint] = useState(true);
 
   return (
-    <div className="relative h-dvh w-full bg-[#0e0d0c]">
+    <div className="gallery-stage relative h-dvh w-full touch-none select-none overflow-hidden overscroll-none bg-[#0e0d0c]">
       <Canvas
         shadows={false}
         camera={{ position: [0, 1.6, 0.5], fov: 62, near: 0.1, far: 60 }}
@@ -31,9 +31,14 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
       </div>
 
       {showHint && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-black/40 px-5 py-2 text-center text-xs text-white/80 backdrop-blur-sm">
-          Use Forward / Back to tour · drag to look · WASD to free-walk · click a
-          painting to open it
+        <div className="pointer-events-none absolute left-1/2 top-16 z-10 w-[min(92vw,32rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-black/40 px-4 py-2 text-center text-[0.7rem] leading-relaxed text-white/80 backdrop-blur-sm sm:rounded-full sm:text-xs">
+          <span className="sm:hidden">
+            Drag to look · arrows to walk · Forward/Back to tour · tap a painting
+          </span>
+          <span className="hidden sm:inline">
+            Use Forward / Back to tour · drag to look · WASD to free-walk · click
+            a painting to open it
+          </span>
         </div>
       )}
 

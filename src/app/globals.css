@@ -30,3 +30,10 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* react-three-fiber does not set touch-action on its canvas. Without this the
+   browser treats a touch drag as a scroll/pinch and never delivers
+   pointermove, so drag-to-look does nothing on phones and tablets. */
+.gallery-stage canvas {
+  touch-action: none;
+}

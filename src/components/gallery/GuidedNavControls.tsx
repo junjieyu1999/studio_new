@@ -24,12 +24,12 @@ export function GuidedNavControls() {
   const atEnd = pos.total > 0 && pos.index >= pos.total - 1;
 
   return (
-    <div className="pointer-events-none absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+    <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
       <button
         onClick={stepBackward}
         disabled={atStart}
         aria-label="Previous artwork"
-        className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-5 text-sm text-white/90 backdrop-blur-sm transition enabled:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
+        className="pointer-events-auto flex h-12 touch-none select-none items-center gap-2 rounded-full border border-white/20 bg-black/45 px-5 text-sm text-white/90 backdrop-blur-sm transition enabled:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
       >
         <span aria-hidden>←</span>
         <span className="hidden sm:inline">Back</span>
@@ -45,7 +45,7 @@ export function GuidedNavControls() {
         onClick={stepForward}
         disabled={atEnd}
         aria-label="Next artwork"
-        className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-5 text-sm text-white/90 backdrop-blur-sm transition enabled:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
+        className="pointer-events-auto flex h-12 touch-none select-none items-center gap-2 rounded-full border border-white/20 bg-black/45 px-5 text-sm text-white/90 backdrop-blur-sm transition enabled:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
       >
         <span className="hidden sm:inline">Forward</span>
         <span aria-hidden>→</span>
