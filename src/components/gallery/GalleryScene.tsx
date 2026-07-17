@@ -365,11 +365,14 @@ export function GalleryScene({
         />
       </mesh>
 
-      {/* Side walls */}
+      {/* Side walls. Rotation is -s so each plane's normal faces INTO the room:
+          the left wall (s=-1, x=-4) needs +90deg, the right wall (s=+1) -90deg.
+          With the sign flipped they get back-face culled and you see the sky
+          straight through them. */}
       {[-1, 1].map((s) => (
         <mesh
           key={`wall${s}`}
-          rotation={[0, s * (Math.PI / 2), 0]}
+          rotation={[0, -s * (Math.PI / 2), 0]}
           position={[s * halfW, WALL_HEIGHT / 2, corridorLength / 2]}
         >
           <planeGeometry args={[corridorLength, WALL_HEIGHT]} />
