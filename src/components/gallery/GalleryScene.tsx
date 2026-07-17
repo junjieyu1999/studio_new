@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { MeshReflectorMaterial } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { Artwork } from "@/types/artwork";
 import { setStops } from "@/lib/guided-nav";
@@ -42,6 +43,8 @@ const PALETTES = {
     glass: "#bcdcfb",
     glassOpacity: 0.2,
     glassEmissive: 0.5,
+    cloud: "#ffffff",
+    cloudOpacity: 0.9,
     spot: 5,
     spotColor: "#fff0d6",
     panel: 6,
@@ -62,6 +65,8 @@ const PALETTES = {
     glass: "#ffab5e",
     glassOpacity: 0.3,
     glassEmissive: 0.75,
+    cloud: "#ffbe95",
+    cloudOpacity: 0.95,
     spot: 8,
     spotColor: "#ffd39a",
     panel: 8,
@@ -81,6 +86,8 @@ const PALETTES = {
     glass: "#070a14",
     glassOpacity: 0.62,
     glassEmissive: 0.04,
+    cloud: "#2b3450",
+    cloudOpacity: 0.55,
     spot: 18,
     spotColor: "#ffcf8f",
     panel: 11,
@@ -90,6 +97,53 @@ const PALETTES = {
 } as const;
 
 type Palette = (typeof PALETTES)[TimeMode];
+
+/**
+ * Soft cumulus painted onto a transparent canvas. Every puff is drawn nine
+ * times (offset by ±one tile) so the texture wraps seamlessly and can be
+ * scrolled forever without a visible seam.
+ */
+function makeCloudTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const S = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const puff = (x: number, y: number, r: number, a: number) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  for (let c = 0; c < 9; c++) {
+    const cx = Math.random() * S;
+    const cy = Math.random() * S;
+    const puffs = 5 + Math.floor(Math.random() * 5);
+    for (let p = 0; p < puffs; p++) {
+      const ox = cx + (Math.random() - 0.5) * 130;
+      const oy = cy + (Math.random() - 0.5) * 60;
+      const r = 30 + Math.random() * 55;
+      const a = 0.3 + Math.random() * 0.3;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          puff(ox + dx * S, oy + dy * S, r, a);
+        }
+      }
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
+}
 
 // Procedural oak planks running the length of the corridor.
 function makeWoodTexture(): THREE.CanvasTexture | null {
@@ -227,6 +281,51 @@ function Bench({ x, z }: { x: number; z: number }) {
   );
 }
 
+/**
+ * Drifting cloud layer sitting well above the glass roof, so it reads as real
+ * sky seen through the panes. Unlit (meshBasic) — it is sky, not a surface in
+ * the room — and tinted per palette so it turns pink at golden hour and dark
+ * at night.
+ */
+function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  const tex = useMemo(() => makeCloudTexture(), []);
+  useEffect(() => {
+    const t = tex;
+    return () => t?.dispose();
+  }, [tex]);
+
+  useFrame((_, delta) => {
+    const map = matRef.current?.map;
+    if (!map) return;
+    // slow drift; the seamless wrap means this can run indefinitely
+    map.offset.x += delta * 0.0035;
+    map.offset.y += delta * 0.0012;
+  });
+
+  if (!tex) return null;
+
+  return (
+    <mesh
+      rotation={[Math.PI / 2, 0, 0]}
+      position={[0, WALL_HEIGHT + 7, length / 2]}
+      renderOrder={-1}
+    >
+      <planeGeometry args={[CORRIDOR_WIDTH * 6, length * 2]} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={tex}
+        color={palette.cloud}
+        transparent
+        opacity={palette.cloudOpacity}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
 // Glass roof with metal mullions — the room's daylight source.
 function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
   const crossCount = Math.max(1, Math.floor(length / 1.6));
@@ -344,6 +443,7 @@ export function GalleryScene({
         color={palette.spotColor}
       />
 
+      <CloudLayer length={corridorLength} palette={palette} />
       <GlassRoof length={corridorLength} palette={palette} />
 
       {/* Wooden floor */}
