@@ -12,6 +12,50 @@ const MAX_WIDTH = 3.4;
 
 // Dark antique-gold frame — reads golden under the warm gallery lights.
 const FRAME_COLOR = "#8a6a2f";
+const FRAME_DARK = "#3b2c15";
+const RAIL_T = 0.17; // rail thickness (visible border width)
+const RAIL_D = 0.18; // rail depth — how far the frame stands off the wall
+
+/**
+ * Frame built from four real rails that project forward past the canvas, so it
+ * catches the light and casts a proper edge instead of reading as a flat panel.
+ */
+function Frame({ w, h }: { w: number; h: number }) {
+  const z = RAIL_D / 2 - 0.04; // rails end up proud of the canvas plane
+  const rail = (
+    <meshStandardMaterial color={FRAME_COLOR} metalness={0.55} roughness={0.35} />
+  );
+
+  return (
+    <group>
+      {/* recessed backing board / inner rebate */}
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[w + RAIL_T * 2, h + RAIL_T * 2, 0.06]} />
+        <meshStandardMaterial color={FRAME_DARK} roughness={0.65} metalness={0.2} />
+      </mesh>
+
+      {/* top / bottom */}
+      <mesh position={[0, h / 2 + RAIL_T / 2, z]}>
+        <boxGeometry args={[w + RAIL_T * 2, RAIL_T, RAIL_D]} />
+        {rail}
+      </mesh>
+      <mesh position={[0, -(h / 2 + RAIL_T / 2), z]}>
+        <boxGeometry args={[w + RAIL_T * 2, RAIL_T, RAIL_D]} />
+        {rail}
+      </mesh>
+
+      {/* left / right */}
+      <mesh position={[-(w / 2 + RAIL_T / 2), 0, z]}>
+        <boxGeometry args={[RAIL_T, h, RAIL_D]} />
+        {rail}
+      </mesh>
+      <mesh position={[w / 2 + RAIL_T / 2, 0, z]}>
+        <boxGeometry args={[RAIL_T, h, RAIL_D]} />
+        {rail}
+      </mesh>
+    </group>
+  );
+}
 
 function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
   const texture = useTexture(artwork.image_url as string);
@@ -37,10 +81,7 @@ function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
 
   return (
     <group>
-      <mesh position={[0, 0, -0.06]}>
-        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
-        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
-      </mesh>
+      <Frame w={width} h={height} />
       <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={texture} roughness={0.85} />
@@ -55,10 +96,7 @@ function GradientFallback({ artwork }: { artwork: Artwork }) {
 
   return (
     <group>
-      <mesh position={[0, 0, -0.06]}>
-        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
-        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
-      </mesh>
+      <Frame w={width} h={height} />
       <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial color="#8a8a8a" roughness={0.9} />
