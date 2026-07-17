@@ -22,25 +22,27 @@ const MARGIN = 4;
 const WOOD_TILE_X = 1.2;
 const WOOD_TILE_Z = 3;
 
-// Warm "hygge" palettes. Daylight pours through the glass roof; at night the
-// room falls away and each piece is picked out by a warm lamp.
+// The room itself stays a constant warm plaster/brass; only the sky beyond the
+// glass roof — and the light falling through it — changes with the hour. Light
+// colours stay near-neutral so the walls never take on a blue/orange cast.
+const WALL_COLOR = "#e5dccb";
+const BEAM_COLOR = "#cfc5b1";
+
 const PALETTES = {
   // Blue skies through the glass roof.
   day: {
     bg: "#a9c9e6",
-    fogNear: 20,
-    fogFar: 60,
-    ambient: 0.7,
-    hemiSky: "#d3e6f9",
-    hemiGround: "#9c7b52",
-    hemi: 0.9,
+    fogNear: 26,
+    fogFar: 70,
+    ambient: 0.72,
+    hemiSky: "#f7f3ea",
+    hemiGround: "#a0855f",
+    hemi: 0.75,
     sun: 1.0,
     sunColor: "#fff6e6",
-    wall: "#e5dccb",
-    beam: "#cfc5b1",
-    glass: "#d2e8ff",
-    glassOpacity: 0.14,
-    glassEmissive: 0.34,
+    glass: "#bcdcfb",
+    glassOpacity: 0.2,
+    glassEmissive: 0.5,
     spot: 5,
     spotColor: "#fff0d6",
     panel: 6,
@@ -50,27 +52,25 @@ const PALETTES = {
   // Low sun, reddish-orange skies.
   golden: {
     bg: "#dd9a55",
-    fogNear: 16,
-    fogFar: 50,
-    ambient: 0.48,
-    hemiSky: "#ffbe78",
-    hemiGround: "#7a5230",
-    hemi: 0.75,
-    sun: 1.15,
-    sunColor: "#ff9d4d",
-    wall: "#e2cba6",
-    beam: "#b89168",
-    glass: "#ffbe80",
-    glassOpacity: 0.2,
-    glassEmissive: 0.6,
-    spot: 9,
+    fogNear: 22,
+    fogFar: 60,
+    ambient: 0.6,
+    hemiSky: "#fff0dd",
+    hemiGround: "#8a6742",
+    hemi: 0.7,
+    sun: 1.05,
+    sunColor: "#ffb066",
+    glass: "#ffab5e",
+    glassOpacity: 0.3,
+    glassEmissive: 0.75,
+    spot: 8,
     spotColor: "#ffd39a",
     panel: 8,
     bloom: 0.4,
     vignette: 0.58,
   },
   night: {
-    bg: "#0d0b09",
+    bg: "#0b0e18",
     fogNear: 10,
     fogFar: 34,
     ambient: 0.18,
@@ -79,11 +79,9 @@ const PALETTES = {
     hemi: 0.3,
     sun: 0,
     sunColor: "#243049",
-    wall: "#3c3329",
-    beam: "#221c15",
-    glass: "#0a0e1a",
-    glassOpacity: 0.5,
-    glassEmissive: 0.05,
+    glass: "#070a14",
+    glassOpacity: 0.62,
+    glassEmissive: 0.04,
     spot: 18,
     spotColor: "#ffcf8f",
     panel: 11,
@@ -253,7 +251,7 @@ function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
       {[-3, -1.5, 0, 1.5, 3].map((x) => (
         <mesh key={`lb-${x}`} position={[x, WALL_HEIGHT - 0.07, length / 2]}>
           <boxGeometry args={[0.07, 0.12, length]} />
-          <meshStandardMaterial color={palette.beam} roughness={0.55} metalness={0.35} />
+          <meshStandardMaterial color={BEAM_COLOR} roughness={0.55} metalness={0.35} />
         </mesh>
       ))}
 
@@ -264,7 +262,7 @@ function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
           position={[0, WALL_HEIGHT - 0.07, (i + 0.5) * (length / crossCount)]}
         >
           <boxGeometry args={[CORRIDOR_WIDTH, 0.1, 0.07]} />
-          <meshStandardMaterial color={palette.beam} roughness={0.55} metalness={0.35} />
+          <meshStandardMaterial color={BEAM_COLOR} roughness={0.55} metalness={0.35} />
         </mesh>
       ))}
     </group>
@@ -376,7 +374,7 @@ export function GalleryScene({
           position={[s * halfW, WALL_HEIGHT / 2, corridorLength / 2]}
         >
           <planeGeometry args={[corridorLength, WALL_HEIGHT]} />
-          <meshStandardMaterial color={palette.wall} roughness={0.95} />
+          <meshStandardMaterial color={WALL_COLOR} roughness={0.95} />
         </mesh>
       ))}
 
