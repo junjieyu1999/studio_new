@@ -25,26 +25,49 @@ const WOOD_TILE_Z = 3;
 // Warm "hygge" palettes. Daylight pours through the glass roof; at night the
 // room falls away and each piece is picked out by a warm lamp.
 const PALETTES = {
+  // Blue skies through the glass roof.
   day: {
-    bg: "#e9e0d1",
-    fogNear: 18,
-    fogFar: 55,
-    ambient: 0.72,
-    hemiSky: "#fff6e8",
+    bg: "#a9c9e6",
+    fogNear: 20,
+    fogFar: 60,
+    ambient: 0.7,
+    hemiSky: "#d3e6f9",
     hemiGround: "#9c7b52",
-    hemi: 0.8,
-    sun: 0.9,
-    sunColor: "#fff3dc",
+    hemi: 0.9,
+    sun: 1.0,
+    sunColor: "#fff6e6",
     wall: "#e5dccb",
     beam: "#cfc5b1",
-    glass: "#fdf6e6",
-    glassOpacity: 0.16,
-    glassEmissive: 0.5,
-    spot: 6,
+    glass: "#d2e8ff",
+    glassOpacity: 0.14,
+    glassEmissive: 0.34,
+    spot: 5,
     spotColor: "#fff0d6",
     panel: 6,
-    bloom: 0.22,
-    vignette: 0.5,
+    bloom: 0.2,
+    vignette: 0.45,
+  },
+  // Low sun, reddish-orange skies.
+  golden: {
+    bg: "#dd9a55",
+    fogNear: 16,
+    fogFar: 50,
+    ambient: 0.48,
+    hemiSky: "#ffbe78",
+    hemiGround: "#7a5230",
+    hemi: 0.75,
+    sun: 1.15,
+    sunColor: "#ff9d4d",
+    wall: "#e2cba6",
+    beam: "#b89168",
+    glass: "#ffbe80",
+    glassOpacity: 0.2,
+    glassEmissive: 0.6,
+    spot: 9,
+    spotColor: "#ffd39a",
+    panel: 8,
+    bloom: 0.4,
+    vignette: 0.58,
   },
   night: {
     bg: "#0d0b09",
@@ -138,7 +161,8 @@ function layout(artworks: Artwork[]) {
     const z = START_Z + row * SPACING;
     const x = side * (CORRIDOR_WIDTH / 2 - 0.04);
     const rotationY = side === -1 ? Math.PI / 2 : -Math.PI / 2;
-    return { artwork, position: [x, 1.7, z], rotationY };
+    // Hung high on the wall, gallery-style.
+    return { artwork, position: [x, 2.15, z], rotationY };
   });
 
   const stops = [
@@ -255,7 +279,9 @@ export function GalleryScene({
   mode: TimeMode;
 }) {
   const palette = PALETTES[mode];
-  const isDay = mode === "day";
+  const isNight = mode === "night";
+  // Golden hour sits low on the horizon; midday is overhead.
+  const sunY = mode === "golden" ? 3.5 : 14;
 
   const { placed, corridorLength, stops } = useMemo(
     () => layout(artworks),
@@ -297,9 +323,9 @@ export function GalleryScene({
       <hemisphereLight
         args={[palette.hemiSky, palette.hemiGround, palette.hemi]}
       />
-      {isDay && (
+      {!isNight && (
         <directionalLight
-          position={[3, 14, corridorLength * 0.35]}
+          position={[6, sunY, corridorLength * 0.35]}
           intensity={palette.sun}
           color={palette.sunColor}
         />
@@ -332,7 +358,7 @@ export function GalleryScene({
           resolution={1024}
           blur={[500, 260]}
           mixBlur={1.4}
-          mixStrength={isDay ? 0.25 : 0.45}
+          mixStrength={isNight ? 0.45 : 0.25}
           mixContrast={1}
           roughness={0.75}
           metalness={0.05}

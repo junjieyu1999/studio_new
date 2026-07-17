@@ -3,7 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useState, useSyncExternalStore } from "react";
 import { Artwork } from "@/types/artwork";
-import { timeOfDayStore, type TimeMode } from "@/lib/time-of-day";
+import { MODE_ORDER, timeOfDayStore, type TimeMode } from "@/lib/time-of-day";
 import { GalleryScene } from "./GalleryScene";
 import { GuidedNavControls } from "./GuidedNavControls";
 
@@ -21,6 +21,18 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
   // null = follow the viewer's local time; otherwise a manual override.
   const [override, setOverride] = useState<TimeMode | null>(null);
   const mode = override ?? autoMode;
+  const light = mode !== "night";
+
+  const cycleMode = () => {
+    const next = MODE_ORDER[(MODE_ORDER.indexOf(mode) + 1) % MODE_ORDER.length];
+    setOverride(next);
+  };
+
+  const MODE_LABEL: Record<TimeMode, string> = {
+    day: "Daylight",
+    golden: "Golden hour",
+    night: "Evening",
+  };
 
   return (
     <div className="gallery-stage relative h-dvh w-full touch-none select-none overflow-hidden overscroll-none bg-[#0d0b09]">
@@ -39,34 +51,41 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
       <div className="pointer-events-none absolute left-1/2 top-6 z-10 -translate-x-1/2 text-center">
         <h1
           className={`text-sm font-medium tracking-[0.3em] ${
-            mode === "day" ? "text-[#4a4034]/80" : "text-white/70"
+            light ? "text-[#4a4034]/80" : "text-white/70"
           }`}
         >
           THE GALLERY
         </h1>
       </div>
 
-      {/* Day / night toggle */}
+      {/* Daylight / golden hour / evening — follows local time, tap to cycle */}
       <button
-        onClick={() => setOverride(mode === "day" ? "night" : "day")}
-        aria-label={mode === "day" ? "Switch to evening" : "Switch to daylight"}
+        onClick={cycleMode}
+        aria-label={`${MODE_LABEL[mode]} — switch lighting`}
         title={
           override
-            ? "Manual — tap to switch"
-            : "Following your local time — tap to switch"
+            ? `${MODE_LABEL[mode]} (manual) — tap to switch`
+            : `${MODE_LABEL[mode]} — following your local time, tap to switch`
         }
         className={`pointer-events-auto absolute right-6 top-5 z-20 flex h-11 w-11 touch-none select-none items-center justify-center rounded-full border backdrop-blur-sm transition ${
-          mode === "day"
+          light
             ? "border-black/10 bg-white/50 text-[#5a4a33] hover:bg-white/70"
             : "border-white/15 bg-black/40 text-[#e8c874] hover:bg-white/10"
         }`}
       >
-        {mode === "day" ? (
+        {mode === "day" && (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
             <circle cx="12" cy="12" r="4.5" />
             <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" />
           </svg>
-        ) : (
+        )}
+        {mode === "golden" && (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+            <circle cx="12" cy="11" r="3.6" />
+            <path d="M12 2.5v2M4.6 11H2.6M21.4 11h-2M5.6 5.1l1.4 1.4M17 6.5l1.4-1.4M3 17h18M6.5 20.5h11" />
+          </svg>
+        )}
+        {mode === "night" && (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
             <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
           </svg>
@@ -76,13 +95,13 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
       {showHint && (
         <div
           className={`pointer-events-none absolute left-1/2 top-16 z-10 w-[min(92vw,32rem)] -translate-x-1/2 rounded-2xl border px-4 py-2 text-center text-[0.7rem] leading-relaxed backdrop-blur-sm sm:rounded-full sm:text-xs ${
-            mode === "day"
+            light
               ? "border-black/10 bg-white/45 text-[#4a4034]"
               : "border-white/15 bg-black/40 text-white/80"
           }`}
         >
           <span className="sm:hidden">
-            Drag to look · arrows to walk the room · tap a painting
+            Drag to look · arrows to walk the room · tap a plaque to view
           </span>
           <span className="hidden sm:inline">
             Use Forward / Back to tour · drag to look · WASD to free-walk · click

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useRef, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Artwork } from "@/types/artwork";
 
@@ -105,6 +106,77 @@ function GradientFallback({ artwork }: { artwork: Artwork }) {
   );
 }
 
+/**
+ * Brass nameplate under the piece. It breathes on a 2s cycle so it reads as
+ * interactive — visitors were not realising the artwork itself is clickable.
+ */
+function Plaque({
+  artwork,
+  hovered,
+}: {
+  artwork: Artwork;
+  hovered: boolean;
+}) {
+  const mat = useRef<THREE.MeshStandardMaterial>(null);
+
+  useFrame((state) => {
+    if (!mat.current) return;
+    // sin(pi * t) completes a full cycle every 2 seconds.
+    const pulse = 0.5 + 0.5 * Math.sin(Math.PI * state.clock.elapsedTime);
+    mat.current.emissiveIntensity = hovered ? 1.0 : 0.15 + pulse * 0.45;
+  });
+
+  return (
+    <group position={[0, -1.72, 0.06]}>
+      <mesh>
+        <boxGeometry args={[1.9, 0.4, 0.045]} />
+        <meshStandardMaterial
+          ref={mat}
+          color="#8a6a2f"
+          emissive="#e8c874"
+          emissiveIntensity={0.25}
+          metalness={0.65}
+          roughness={0.32}
+        />
+      </mesh>
+
+      <Suspense fallback={null}>
+        <Text
+          position={[0, 0.07, 0.028]}
+          fontSize={0.12}
+          maxWidth={1.7}
+          color="#1f1708"
+          anchorX="center"
+          anchorY="middle"
+          textAlign="center"
+        >
+          {artwork.title}
+        </Text>
+        <Text
+          position={[0, -0.09, 0.028]}
+          fontSize={0.062}
+          letterSpacing={0.04}
+          color="#3d2f14"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {`${artwork.year} · ${artwork.medium}`}
+        </Text>
+        <Text
+          position={[0, -0.31, 0.028]}
+          fontSize={0.072}
+          letterSpacing={0.06}
+          color={hovered ? "#e8c874" : "#c9a45e"}
+          anchorX="center"
+          anchorY="middle"
+        >
+          {hovered ? "OPEN  →" : "VIEW DETAILS  →"}
+        </Text>
+      </Suspense>
+    </group>
+  );
+}
+
 interface PaintingProps {
   artwork: Artwork;
   position: [number, number, number];
@@ -145,30 +217,7 @@ export function Painting({ artwork, position, rotationY }: PaintingProps) {
         )}
       </Suspense>
 
-      {/* Title + details above the painting (light text for dark walls) */}
-      <Suspense fallback={null}>
-        <Text
-          position={[0, 1.62, 0.02]}
-          fontSize={0.16}
-          color={hovered ? "#e8c874" : "#f2ece0"}
-          anchorX="center"
-          anchorY="bottom"
-          maxWidth={3.2}
-          textAlign="center"
-        >
-          {artwork.title}
-        </Text>
-        <Text
-          position={[0, 1.5, 0.02]}
-          fontSize={0.088}
-          letterSpacing={0.02}
-          color="#b6ad9d"
-          anchorX="center"
-          anchorY="top"
-        >
-          {`${artwork.year} · ${artwork.medium}`}
-        </Text>
-      </Suspense>
+      <Plaque artwork={artwork} hovered={hovered} />
     </group>
   );
 }

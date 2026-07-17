@@ -24,7 +24,7 @@ export function GuidedNavControls({ mode }: { mode: TimeMode }) {
   const atStart = pos.index <= 0;
   const atEnd = pos.total > 0 && pos.index >= pos.total - 1;
 
-  const isDay = mode === "day";
+  const isDay = mode !== "night";
   // These arrows are the only way to move on touch, so they're sized generously.
   const btn = `pointer-events-auto flex h-16 w-16 touch-none select-none items-center justify-center rounded-full border text-2xl backdrop-blur-sm transition disabled:cursor-not-allowed disabled:opacity-25 sm:h-12 sm:w-auto sm:gap-2 sm:px-5 sm:text-sm ${
     isDay
