@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, STORAGE_BUCKET } from "@/lib/supabase-admin";
+import { toPrice } from "@/lib/price";
 
 const STATUSES = ["available", "sold", "in-progress"];
 const THEMES = ["portrait", "landscape"];
@@ -23,6 +24,7 @@ export async function PATCH(
     if ("description" in body) update.description = body.description || null;
     if ("inspiration" in body) update.inspiration = body.inspiration || null;
     if ("process" in body) update.process = body.process || null;
+    if ("price" in body) update.price = toPrice(body.price);
     if ("gradient_bg" in body) update.gradient_bg = body.gradient_bg || null;
     if ("sort_order" in body) update.sort_order = Number(body.sort_order) || 0;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-admin";
+import { toPrice } from "@/lib/price";
 
 const STATUSES = ["available", "sold", "in-progress"];
 const THEMES = ["portrait", "landscape"];
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
         description: body.description || null,
         inspiration: body.inspiration || null,
         process: body.process || null,
+        price: toPrice(body.price),
         gradient_bg: body.gradient_bg || null,
         image_url: null,
         sort_order: Number(body.sort_order) || 0,

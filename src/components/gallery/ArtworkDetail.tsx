@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { formatPrice } from "@/lib/format";
 import { ArtworkWithImages } from "@/types/artwork";
 
 const STATUS_LABEL: Record<ArtworkWithImages["status"], string> = {
@@ -79,17 +80,25 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
             {artwork.year} · {artwork.medium} · {artwork.dimensions}
           </p>
 
-          <span
-            className={`mt-4 inline-block rounded-full border px-3 py-1 text-xs font-medium tracking-wide ${
-              artwork.status === "available"
-                ? "border-emerald-700/30 text-emerald-800"
-                : artwork.status === "sold"
-                ? "border-[#1c1a17]/20 text-[#1c1a17]/60"
-                : "border-amber-700/30 text-amber-800"
-            }`}
-          >
-            {STATUS_LABEL[artwork.status]}
-          </span>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span
+              className={`inline-block rounded-full border px-3 py-1 text-xs font-medium tracking-wide ${
+                artwork.status === "available"
+                  ? "border-emerald-700/30 text-emerald-800"
+                  : artwork.status === "sold"
+                  ? "border-[#1c1a17]/20 text-[#1c1a17]/60"
+                  : "border-amber-700/30 text-amber-800"
+              }`}
+            >
+              {STATUS_LABEL[artwork.status]}
+            </span>
+
+            {artwork.status !== "sold" && (
+              <span className="font-serif text-2xl text-[#1c1a17]">
+                {formatPrice(artwork.price) ?? "Price on request"}
+              </span>
+            )}
+          </div>
 
           {artwork.description && (
             <p className="mt-8 text-base leading-relaxed text-[#1c1a17]/85">

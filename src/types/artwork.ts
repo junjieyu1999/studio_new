@@ -12,6 +12,8 @@ export interface Artwork {
   description: string | null;
   inspiration: string | null;
   process: string | null;
+  // numeric column in Postgres; null means "price on request".
+  price: number | null;
   gradient_bg: string | null;
   image_url: string | null;
   sort_order: number | null;

@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { MeshReflectorMaterial } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { Artwork } from "@/types/artwork";
 import { setStops } from "@/lib/guided-nav";
+import { BEAM_COLOR, WALL_COLOR } from "@/lib/gallery-theme";
+import type { TimeMode } from "@/lib/time-of-day";
 import { AboutWall } from "./AboutWall";
 import { BackWall } from "./BackWall";
 import { Painting } from "./Painting";
@@ -16,31 +19,177 @@ const WALL_HEIGHT = 5;
 const SPACING = 5;
 const START_Z = 4.5;
 const MARGIN = 4;
-const TILE_SIZE = 1.6; // world units per floor tile
 
-const WALL_COLOR = "#7a7264"; // medium warm greige gallery wall
-const TRIM_DARK = "#14110c";
-const GOLD = "#6f5426";
+// Wood plank texture tile size, in world units.
+const WOOD_TILE_X = 1.2;
+const WOOD_TILE_Z = 3;
 
-// Procedural stone-tile texture: a light tile with a darker grout border.
-function makeTileTexture(): THREE.CanvasTexture | null {
+// The room itself stays constant (see gallery-theme); only the sky beyond the
+// glass roof — and the light falling through it — changes with the hour. Light
+// colours stay near-neutral so the walls never take on a blue/orange cast.
+
+const PALETTES = {
+  // Blue skies through the glass roof.
+  day: {
+    bg: "#a9c9e6",
+    fogNear: 26,
+    fogFar: 70,
+    ambient: 0.72,
+    hemiSky: "#f7f3ea",
+    hemiGround: "#a0855f",
+    hemi: 0.75,
+    sun: 1.0,
+    sunColor: "#fff6e6",
+    glass: "#bcdcfb",
+    glassOpacity: 0.2,
+    glassEmissive: 0.5,
+    cloud: "#ffffff",
+    cloudOpacity: 0.9,
+    spot: 5,
+    spotColor: "#fff0d6",
+    panel: 6,
+    bloom: 0.2,
+    vignette: 0.45,
+  },
+  // Low sun, reddish-orange skies.
+  golden: {
+    bg: "#dd9a55",
+    fogNear: 22,
+    fogFar: 60,
+    ambient: 0.6,
+    hemiSky: "#fff0dd",
+    hemiGround: "#8a6742",
+    hemi: 0.7,
+    sun: 1.05,
+    sunColor: "#ffb066",
+    glass: "#ffab5e",
+    glassOpacity: 0.3,
+    glassEmissive: 0.75,
+    cloud: "#ffbe95",
+    cloudOpacity: 0.95,
+    spot: 8,
+    spotColor: "#ffd39a",
+    panel: 8,
+    bloom: 0.4,
+    vignette: 0.58,
+  },
+  night: {
+    bg: "#0b0e18",
+    fogNear: 10,
+    fogFar: 34,
+    ambient: 0.18,
+    hemiSky: "#2c2418",
+    hemiGround: "#100c08",
+    hemi: 0.3,
+    sun: 0,
+    sunColor: "#243049",
+    glass: "#070a14",
+    glassOpacity: 0.62,
+    glassEmissive: 0.04,
+    cloud: "#2b3450",
+    cloudOpacity: 0.55,
+    spot: 18,
+    spotColor: "#ffcf8f",
+    panel: 11,
+    bloom: 0.5,
+    vignette: 0.75,
+  },
+} as const;
+
+type Palette = (typeof PALETTES)[TimeMode];
+
+/**
+ * Soft cumulus painted onto a transparent canvas. Every puff is drawn nine
+ * times (offset by ±one tile) so the texture wraps seamlessly and can be
+ * scrolled forever without a visible seam.
+ */
+function makeCloudTexture(): THREE.CanvasTexture | null {
   if (typeof document === "undefined") return null;
-  const s = 256;
+  const S = 512;
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = s;
+  canvas.width = canvas.height = S;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  ctx.fillStyle = "#cdc7b8"; // grout / gap color
-  ctx.fillRect(0, 0, s, s);
+  const puff = (x: number, y: number, r: number, a: number) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
 
-  const inset = s * 0.045;
-  const grad = ctx.createLinearGradient(0, 0, s, s);
-  grad.addColorStop(0, "#e4dfd3");
-  grad.addColorStop(0.5, "#d8d2c4");
-  grad.addColorStop(1, "#ded8cb");
-  ctx.fillStyle = grad;
-  ctx.fillRect(inset, inset, s - inset * 2, s - inset * 2);
+  for (let c = 0; c < 9; c++) {
+    const cx = Math.random() * S;
+    const cy = Math.random() * S;
+    const puffs = 5 + Math.floor(Math.random() * 5);
+    for (let p = 0; p < puffs; p++) {
+      const ox = cx + (Math.random() - 0.5) * 130;
+      const oy = cy + (Math.random() - 0.5) * 60;
+      const r = 30 + Math.random() * 55;
+      const a = 0.3 + Math.random() * 0.3;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          puff(ox + dx * S, oy + dy * S, r, a);
+        }
+      }
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
+}
+
+// Procedural oak planks running the length of the corridor.
+function makeWoodTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const w = 512;
+  const h = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const planks = 5;
+  const pw = w / planks;
+  const tones = ["#8a6039", "#7d5531", "#956844", "#835a35", "#8f6340"];
+
+  for (let i = 0; i < planks; i++) {
+    const x = i * pw;
+    ctx.fillStyle = tones[i % tones.length];
+    ctx.fillRect(x, 0, pw, h);
+
+    // grain streaks running along the plank
+    ctx.strokeStyle = "rgba(58,34,16,0.18)";
+    ctx.lineWidth = 1;
+    for (let g = 0; g < 26; g++) {
+      const gx = x + Math.random() * pw;
+      ctx.beginPath();
+      ctx.moveTo(gx, 0);
+      ctx.bezierCurveTo(
+        gx + (Math.random() * 6 - 3),
+        h * 0.33,
+        gx + (Math.random() * 6 - 3),
+        h * 0.66,
+        gx + (Math.random() * 4 - 2),
+        h
+      );
+      ctx.stroke();
+    }
+
+    // seam between planks
+    ctx.fillStyle = "rgba(32,18,7,0.55)";
+    ctx.fillRect(x, 0, 2, h);
+
+    // staggered end joint
+    ctx.fillRect(x, ((i * 97) % h), pw, 2);
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -63,22 +212,27 @@ function layout(artworks: Artwork[]) {
     const z = START_Z + row * SPACING;
     const x = side * (CORRIDOR_WIDTH / 2 - 0.04);
     const rotationY = side === -1 ? Math.PI / 2 : -Math.PI / 2;
-    return { artwork, position: [x, 1.7, z], rotationY };
+    // Hung high on the wall, gallery-style.
+    return { artwork, position: [x, 2.15, z], rotationY };
   });
 
-  // Viewing stations for the Prev/Next buttons: the entrance, then one facing
-  // each row of paintings, then the far end. Scales with any artwork count.
   const stops = [
     1.2,
     ...Array.from({ length: rows }, (_, r) => START_Z + r * SPACING),
     corridorLength - 1.4,
   ];
 
-  return { placed, corridorLength, stops, rows };
+  return { placed, corridorLength, stops };
 }
 
-// Track spotlight aimed at a single painting on the wall.
-function PaintingLight({ position }: { position: [number, number, number] }) {
+// Warm lamp aimed at a single piece.
+function PaintingLight({
+  position,
+  palette,
+}: {
+  position: [number, number, number];
+  palette: Palette;
+}) {
   const light = useRef<THREE.SpotLight>(null);
   const target = useRef<THREE.Object3D>(null);
   useEffect(() => {
@@ -88,42 +242,144 @@ function PaintingLight({ position }: { position: [number, number, number] }) {
     }
   });
   const [x, y, z] = position;
-  const toward = x < 0 ? 1.1 : -1.1; // pull the light in toward the corridor
+  const toward = x < 0 ? 1.1 : -1.1;
   return (
     <>
       <spotLight
         ref={light}
-        position={[x + toward, WALL_HEIGHT - 0.5, z]}
-        angle={0.6}
-        penumbra={0.75}
-        intensity={20}
-        distance={9}
+        position={[x + toward, WALL_HEIGHT - 0.9, z]}
+        angle={0.7}
+        penumbra={0.95}
+        intensity={palette.spot}
+        distance={10}
         decay={2}
-        color="#fff2d6"
+        color={palette.spotColor}
       />
       <object3D ref={target} position={[x, y, z]} />
     </>
   );
 }
 
-// Marble viewing bench down the centre of the gallery.
-function Bench({ z }: { z: number }) {
+// Viewing bench placed in front of a piece, parallel to its wall.
+function Bench({ x, z }: { x: number; z: number }) {
+  const bx = x + (x < 0 ? 1.7 : -1.7);
   return (
-    <group position={[0, 0, z]}>
-      <mesh position={[0, 0.46, 0]}>
-        <boxGeometry args={[0.95, 0.14, 2.0]} />
-        <meshStandardMaterial color="#d6d0c2" roughness={0.35} metalness={0.05} />
+    <group position={[bx, 0, z]}>
+      <mesh position={[0, 0.44, 0]}>
+        <boxGeometry args={[0.6, 0.1, 1.7]} />
+        <meshStandardMaterial color="#6b4a2c" roughness={0.55} />
       </mesh>
-      <mesh position={[0, 0.22, 0]}>
-        <boxGeometry args={[0.7, 0.32, 1.7]} />
-        <meshStandardMaterial color="#b9b2a2" roughness={0.55} />
+      <mesh position={[0, 0.2, -0.65]}>
+        <boxGeometry args={[0.5, 0.38, 0.1]} />
+        <meshStandardMaterial color="#4f3620" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.2, 0.65]}>
+        <boxGeometry args={[0.5, 0.38, 0.1]} />
+        <meshStandardMaterial color="#4f3620" roughness={0.6} />
       </mesh>
     </group>
   );
 }
 
-export function GalleryScene({ artworks }: { artworks: Artwork[] }) {
-  const { placed, corridorLength, stops, rows } = useMemo(
+/**
+ * Drifting cloud layer sitting well above the glass roof, so it reads as real
+ * sky seen through the panes. Unlit (meshBasic) — it is sky, not a surface in
+ * the room — and tinted per palette so it turns pink at golden hour and dark
+ * at night.
+ */
+function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  const tex = useMemo(() => makeCloudTexture(), []);
+  useEffect(() => {
+    const t = tex;
+    return () => t?.dispose();
+  }, [tex]);
+
+  useFrame((_, delta) => {
+    const map = matRef.current?.map;
+    if (!map) return;
+    // slow drift; the seamless wrap means this can run indefinitely
+    map.offset.x += delta * 0.0035;
+    map.offset.y += delta * 0.0012;
+  });
+
+  if (!tex) return null;
+
+  return (
+    <mesh
+      rotation={[Math.PI / 2, 0, 0]}
+      position={[0, WALL_HEIGHT + 7, length / 2]}
+      renderOrder={-1}
+    >
+      <planeGeometry args={[CORRIDOR_WIDTH * 6, length * 2]} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={tex}
+        color={palette.cloud}
+        transparent
+        opacity={palette.cloudOpacity}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+// Glass roof with metal mullions — the room's daylight source.
+function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
+  const crossCount = Math.max(1, Math.floor(length / 1.6));
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, WALL_HEIGHT, length / 2]}>
+        <planeGeometry args={[CORRIDOR_WIDTH, length]} />
+        <meshStandardMaterial
+          color={palette.glass}
+          emissive={palette.glass}
+          emissiveIntensity={palette.glassEmissive}
+          transparent
+          opacity={palette.glassOpacity}
+          roughness={0.12}
+          metalness={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* beams running the length */}
+      {[-3, -1.5, 0, 1.5, 3].map((x) => (
+        <mesh key={`lb-${x}`} position={[x, WALL_HEIGHT - 0.07, length / 2]}>
+          <boxGeometry args={[0.07, 0.12, length]} />
+          <meshStandardMaterial color={BEAM_COLOR} roughness={0.55} metalness={0.35} />
+        </mesh>
+      ))}
+
+      {/* cross mullions */}
+      {Array.from({ length: crossCount }).map((_, i) => (
+        <mesh
+          key={`cb-${i}`}
+          position={[0, WALL_HEIGHT - 0.07, (i + 0.5) * (length / crossCount)]}
+        >
+          <boxGeometry args={[CORRIDOR_WIDTH, 0.1, 0.07]} />
+          <meshStandardMaterial color={BEAM_COLOR} roughness={0.55} metalness={0.35} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export function GalleryScene({
+  artworks,
+  mode,
+}: {
+  artworks: Artwork[];
+  mode: TimeMode;
+}) {
+  const palette = PALETTES[mode];
+  const isNight = mode === "night";
+  // Golden hour sits low on the horizon; midday is overhead.
+  const sunY = mode === "golden" ? 3.5 : 14;
+
+  const { placed, corridorLength, stops } = useMemo(
     () => layout(artworks),
     [artworks]
   );
@@ -132,12 +388,10 @@ export function GalleryScene({ artworks }: { artworks: Artwork[] }) {
     setStops(stops);
   }, [stops]);
 
-  // Tiled floor texture, tiled to the corridor size. Configured at creation
-  // time (mutating a hook return value elsewhere trips react-hooks/immutability).
   const floorTexture = useMemo(() => {
-    const tex = makeTileTexture();
+    const tex = makeWoodTexture();
     if (tex) {
-      tex.repeat.set(CORRIDOR_WIDTH / TILE_SIZE, corridorLength / TILE_SIZE);
+      tex.repeat.set(CORRIDOR_WIDTH / WOOD_TILE_X, corridorLength / WOOD_TILE_Z);
       tex.anisotropy = 8;
     }
     return tex;
@@ -155,76 +409,70 @@ export function GalleryScene({ artworks }: { artworks: Artwork[] }) {
   };
 
   const halfW = CORRIDOR_WIDTH / 2;
-  const pilasterZs = Array.from(
-    { length: rows + 1 },
-    (_, k) => START_Z - SPACING / 2 + k * SPACING
-  );
-  const benchZs = Array.from(
-    { length: Math.max(0, rows - 1) },
-    (_, k) => START_Z + SPACING / 2 + k * SPACING
-  );
 
   return (
     <>
-      <fog attach="fog" args={["#0b0a09", 14, 40]} />
-      <color attach="background" args={["#0b0a09"]} />
+      <fog attach="fog" args={[palette.bg, palette.fogNear, palette.fogFar]} />
+      <color attach="background" args={[palette.bg]} />
 
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[4, 8, 2]} intensity={0.4} />
-
-      {/* Ceiling light strips */}
-      {Array.from({ length: Math.ceil(corridorLength / 4) }).map((_, i) => (
-        <mesh key={i} position={[0, WALL_HEIGHT - 0.05, 3 + i * 4]}>
-          <boxGeometry args={[1.2, 0.05, 0.5]} />
-          <meshStandardMaterial
-            color="#fff8e6"
-            emissive="#fff2cf"
-            emissiveIntensity={1.5}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-      {/* Fewer ceiling point lights — the painting spotlights do the work */}
-      {Array.from({ length: Math.ceil(corridorLength / 8) }).map((_, i) => (
-        <pointLight
-          key={`pl-${i}`}
-          position={[0, WALL_HEIGHT - 0.4, 4 + i * 8]}
-          intensity={11}
-          distance={13}
-          decay={2}
+      <ambientLight intensity={palette.ambient} />
+      <hemisphereLight
+        args={[palette.hemiSky, palette.hemiGround, palette.hemi]}
+      />
+      {!isNight && (
+        <directionalLight
+          position={[6, sunY, corridorLength * 0.35]}
+          intensity={palette.sun}
+          color={palette.sunColor}
         />
-      ))}
+      )}
 
-      {/* Reflective tiled floor */}
+      {/* Warm wash on the reviews + about walls so they stay legible at night */}
+      <pointLight
+        position={[0, 3.2, 1.6]}
+        intensity={palette.panel}
+        distance={7}
+        decay={2}
+        color={palette.spotColor}
+      />
+      <pointLight
+        position={[0, 3.2, corridorLength - 1.6]}
+        intensity={palette.panel}
+        distance={7}
+        decay={2}
+        color={palette.spotColor}
+      />
+
+      <CloudLayer length={corridorLength} palette={palette} />
+      <GlassRoof length={corridorLength} palette={palette} />
+
+      {/* Wooden floor */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, corridorLength / 2]}>
         <planeGeometry args={[CORRIDOR_WIDTH, corridorLength]} />
         <MeshReflectorMaterial
           map={floorTexture ?? undefined}
-          color={floorTexture ? "#ffffff" : "#cfc9bb"}
+          color={floorTexture ? "#ffffff" : "#7d5531"}
           resolution={1024}
-          blur={[420, 220]}
-          mixBlur={1.1}
-          mixStrength={0.8}
+          blur={[500, 260]}
+          mixBlur={1.4}
+          mixStrength={isNight ? 0.45 : 0.25}
           mixContrast={1}
-          roughness={0.9}
-          metalness={0.1}
+          roughness={0.75}
+          metalness={0.05}
           depthScale={1}
           minDepthThreshold={0.4}
           maxDepthThreshold={1.3}
         />
       </mesh>
 
-      {/* Ceiling */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, WALL_HEIGHT, corridorLength / 2]}>
-        <planeGeometry args={[CORRIDOR_WIDTH, corridorLength]} />
-        <meshStandardMaterial color="#171410" roughness={0.9} />
-      </mesh>
-
-      {/* Side walls (dark) */}
+      {/* Side walls. Rotation is -s so each plane's normal faces INTO the room:
+          the left wall (s=-1, x=-4) needs +90deg, the right wall (s=+1) -90deg.
+          With the sign flipped they get back-face culled and you see the sky
+          straight through them. */}
       {[-1, 1].map((s) => (
         <mesh
           key={`wall${s}`}
-          rotation={[0, s * (Math.PI / 2), 0]}
+          rotation={[0, -s * (Math.PI / 2), 0]}
           position={[s * halfW, WALL_HEIGHT / 2, corridorLength / 2]}
         >
           <planeGeometry args={[corridorLength, WALL_HEIGHT]} />
@@ -232,63 +480,42 @@ export function GalleryScene({ artworks }: { artworks: Artwork[] }) {
         </mesh>
       ))}
 
-      {/* Baseboards + gold cornice along both side walls */}
+      {/* Skirting + picture rail */}
       {[-1, 1].map((s) => (
         <group key={`trim${s}`}>
           <mesh position={[s * (halfW - 0.06), 0.13, corridorLength / 2]}>
             <boxGeometry args={[0.12, 0.26, corridorLength]} />
-            <meshStandardMaterial color={TRIM_DARK} roughness={0.5} metalness={0.15} />
+            <meshStandardMaterial color="#5b4229" roughness={0.55} />
           </mesh>
-          <mesh position={[s * (halfW - 0.08), WALL_HEIGHT - 0.18, corridorLength / 2]}>
-            <boxGeometry args={[0.16, 0.22, corridorLength]} />
-            <meshStandardMaterial color={GOLD} roughness={0.5} metalness={0.35} />
+          <mesh position={[s * (halfW - 0.07), WALL_HEIGHT - 0.5, corridorLength / 2]}>
+            <boxGeometry args={[0.1, 0.1, corridorLength]} />
+            <meshStandardMaterial color="#6b5230" roughness={0.5} metalness={0.25} />
           </mesh>
         </group>
       ))}
 
-      {/* Pilasters between paintings */}
-      {pilasterZs.map((pz) =>
-        [-1, 1].map((s) => (
-          <mesh
-            key={`pil${s}-${pz}`}
-            position={[s * (halfW - 0.09), WALL_HEIGHT / 2, pz]}
-          >
-            <boxGeometry args={[0.22, WALL_HEIGHT, 0.34]} />
-            <meshStandardMaterial color="#635c4f" roughness={0.85} />
-          </mesh>
-        ))
-      )}
-
-      {/* Central benches */}
-      {benchZs.map((bz) => (
-        <Bench key={`bench-${bz}`} z={bz} />
-      ))}
-
-      {/* Back wall (behind spawn) — collector reviews */}
       <BackWall width={CORRIDOR_WIDTH} z={0} />
-
-      {/* Far end wall — clickable About the artist */}
       <AboutWall width={CORRIDOR_WIDTH} z={corridorLength} />
 
-      {/* Paintings + their track spotlights */}
+      {/* Paintings, their lamps, and a bench facing each */}
       {placed.map(({ artwork, position, rotationY }) => (
         <group key={artwork.id}>
           <Painting artwork={artwork} position={position} rotationY={rotationY} />
-          <PaintingLight position={position} />
+          <PaintingLight position={position} palette={palette} />
+          <Bench x={position[0]} z={position[2]} />
         </group>
       ))}
 
       <WalkControls bounds={bounds} initialYaw={Math.PI} />
 
-      {/* Cinematic post-processing */}
       <EffectComposer>
         <Bloom
           mipmapBlur
-          intensity={0.65}
+          intensity={palette.bloom}
           luminanceThreshold={1.0}
-          luminanceSmoothing={0.2}
+          luminanceSmoothing={0.3}
         />
-        <Vignette offset={0.28} darkness={0.72} eskil={false} />
+        <Vignette offset={0.3} darkness={palette.vignette} eskil={false} />
       </EffectComposer>
     </>
   );

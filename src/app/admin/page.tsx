@@ -20,6 +20,7 @@ interface FormFields {
   description: string;
   inspiration: string;
   process: string;
+  price: string;
   gradient_bg: string;
   sort_order: string;
 }
@@ -35,6 +36,7 @@ const BLANK: FormFields = {
   description: "",
   inspiration: "",
   process: "",
+  price: "",
   gradient_bg: "linear-gradient(145deg,#C4A87A 0%,#8B6842 60%,#5C3D1E 100%)",
   sort_order: "0",
 };
@@ -99,6 +101,7 @@ export default function AdminPage() {
       description: a.description ?? "",
       inspiration: a.inspiration ?? "",
       process: a.process ?? "",
+      price: a.price != null ? String(a.price) : "",
       gradient_bg: a.gradient_bg ?? "",
       sort_order: String(a.sort_order ?? 0),
     });
@@ -153,6 +156,7 @@ export default function AdminPage() {
             description: form.description,
             inspiration: form.inspiration,
             process: form.process,
+            price: form.price,
             gradient_bg: form.gradient_bg,
             sort_order: Number(form.sort_order) || 0,
           }),
@@ -412,6 +416,25 @@ export default function AdminPage() {
                         <span className="text-[0.62rem] normal-case tracking-normal text-[#1c1a17]/40">Lower = earlier</span>
                       </label>
                       <input type="number" value={form.sort_order} onChange={setField("sort_order")} min="0" className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1">
+                      <label className={labelCls}>
+                        Price (SGD)
+                        <span className="text-[0.62rem] normal-case tracking-normal text-[#1c1a17]/40">
+                          Blank = &ldquo;Price on request&rdquo;
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.price}
+                        onChange={setField("price")}
+                        placeholder="1200"
+                        className={inputCls}
+                      />
                     </div>
                   </div>
                 </section>

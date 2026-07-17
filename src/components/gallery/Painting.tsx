@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useRef, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Artwork } from "@/types/artwork";
 
@@ -12,8 +13,131 @@ const MAX_WIDTH = 3.4;
 
 // Dark antique-gold frame — reads golden under the warm gallery lights.
 const FRAME_COLOR = "#8a6a2f";
+const FRAME_DARK = "#3b2c15";
+const RAIL_T = 0.17; // rail thickness (visible border width)
+const RAIL_D = 0.18; // rail depth — how far the frame stands off the wall
 
-function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
+const PLAQUE_SCALE = 0.7; // 30% smaller than the original plate
+const PLAQUE_W = 1.9;
+const PULSE_SECONDS = 12;
+
+/**
+ * Frame built from four real rails that project forward past the canvas, so it
+ * catches the light and casts a proper edge instead of reading as a flat panel.
+ */
+function Frame({ w, h }: { w: number; h: number }) {
+  const z = RAIL_D / 2 - 0.04;
+  const rail = (
+    <meshStandardMaterial color={FRAME_COLOR} metalness={0.55} roughness={0.35} />
+  );
+
+  return (
+    <group>
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[w + RAIL_T * 2, h + RAIL_T * 2, 0.06]} />
+        <meshStandardMaterial color={FRAME_DARK} roughness={0.65} metalness={0.2} />
+      </mesh>
+
+      <mesh position={[0, h / 2 + RAIL_T / 2, z]}>
+        <boxGeometry args={[w + RAIL_T * 2, RAIL_T, RAIL_D]} />
+        {rail}
+      </mesh>
+      <mesh position={[0, -(h / 2 + RAIL_T / 2), z]}>
+        <boxGeometry args={[w + RAIL_T * 2, RAIL_T, RAIL_D]} />
+        {rail}
+      </mesh>
+      <mesh position={[-(w / 2 + RAIL_T / 2), 0, z]}>
+        <boxGeometry args={[RAIL_T, h, RAIL_D]} />
+        {rail}
+      </mesh>
+      <mesh position={[w / 2 + RAIL_T / 2, 0, z]}>
+        <boxGeometry args={[RAIL_T, h, RAIL_D]} />
+        {rail}
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Brass nameplate mounted to the right of the piece, at reading height.
+ * It breathes on a slow 12s cycle so it reads as interactive without nagging —
+ * visitors weren't realising the artwork is clickable.
+ */
+function Plaque({
+  artwork,
+  hovered,
+  x,
+}: {
+  artwork: Artwork;
+  hovered: boolean;
+  x: number;
+}) {
+  const mat = useRef<THREE.MeshStandardMaterial>(null);
+
+  useFrame((state) => {
+    if (!mat.current) return;
+    const w = (2 * Math.PI) / PULSE_SECONDS;
+    const pulse = 0.5 + 0.5 * Math.sin(w * state.clock.elapsedTime);
+    mat.current.emissiveIntensity = hovered ? 1.0 : 0.15 + pulse * 0.45;
+  });
+
+  return (
+    <group position={[x, -0.75, 0.06]} scale={PLAQUE_SCALE}>
+      <mesh>
+        <boxGeometry args={[PLAQUE_W, 0.4, 0.045]} />
+        <meshStandardMaterial
+          ref={mat}
+          color="#8a6a2f"
+          emissive="#e8c874"
+          emissiveIntensity={0.25}
+          metalness={0.65}
+          roughness={0.32}
+        />
+      </mesh>
+
+      <Suspense fallback={null}>
+        <Text
+          position={[0, 0.07, 0.028]}
+          fontSize={0.12}
+          maxWidth={1.7}
+          color="#1f1708"
+          anchorX="center"
+          anchorY="middle"
+          textAlign="center"
+        >
+          {artwork.title}
+        </Text>
+        <Text
+          position={[0, -0.09, 0.028]}
+          fontSize={0.062}
+          letterSpacing={0.04}
+          color="#3d2f14"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {`${artwork.year} · ${artwork.medium}`}
+        </Text>
+        <Text
+          position={[0, -0.31, 0.028]}
+          fontSize={0.072}
+          letterSpacing={0.06}
+          color={hovered ? "#e8c874" : "#c9a45e"}
+          anchorX="center"
+          anchorY="middle"
+        >
+          {hovered ? "OPEN  →" : "VIEW DETAILS  →"}
+        </Text>
+      </Suspense>
+    </group>
+  );
+}
+
+// Where the plaque sits relative to the artwork's own width.
+function plaqueX(width: number) {
+  return width / 2 + RAIL_T + 0.25 + (PLAQUE_W * PLAQUE_SCALE) / 2;
+}
+
+function ArtworkBody({ artwork, hovered }: { artwork: Artwork; hovered: boolean }) {
   const texture = useTexture(artwork.image_url as string);
   const { width, height } = useMemo(() => {
     const img = texture.image as { width: number; height: number };
@@ -27,7 +151,6 @@ function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
       w = MIN_WIDTH;
       h = w / aspect;
     }
-    // Keep the top edge predictable so the title/label sit consistently.
     if (h > MAX_HEIGHT) {
       h = MAX_HEIGHT;
       w = h * aspect;
@@ -36,34 +159,30 @@ function ArtworkTexturePlane({ artwork }: { artwork: Artwork }) {
   }, [texture]);
 
   return (
-    <group>
-      <mesh position={[0, 0, -0.06]}>
-        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
-        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
-      </mesh>
+    <>
+      <Frame w={width} h={height} />
       <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={texture} roughness={0.85} />
       </mesh>
-    </group>
+      <Plaque artwork={artwork} hovered={hovered} x={plaqueX(width)} />
+    </>
   );
 }
 
-function GradientFallback({ artwork }: { artwork: Artwork }) {
+function FallbackBody({ artwork, hovered }: { artwork: Artwork; hovered: boolean }) {
   const width = artwork.theme === "portrait" ? 1.8 : 3.0;
   const height = artwork.theme === "portrait" ? 2.6 : 1.9;
 
   return (
-    <group>
-      <mesh position={[0, 0, -0.06]}>
-        <boxGeometry args={[width + 0.2, height + 0.2, 0.07]} />
-        <meshStandardMaterial color={FRAME_COLOR} metalness={0.45} roughness={0.4} />
-      </mesh>
+    <>
+      <Frame w={width} h={height} />
       <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial color="#8a8a8a" roughness={0.9} />
       </mesh>
-    </group>
+      <Plaque artwork={artwork} hovered={hovered} x={plaqueX(width)} />
+    </>
   );
 }
 
@@ -99,37 +218,12 @@ export function Painting({ artwork, position, rotationY }: PaintingProps) {
         document.body.style.cursor = "auto";
       }}
     >
-      <Suspense fallback={<GradientFallback artwork={artwork} />}>
+      <Suspense fallback={<FallbackBody artwork={artwork} hovered={hovered} />}>
         {artwork.image_url ? (
-          <ArtworkTexturePlane artwork={artwork} />
+          <ArtworkBody artwork={artwork} hovered={hovered} />
         ) : (
-          <GradientFallback artwork={artwork} />
+          <FallbackBody artwork={artwork} hovered={hovered} />
         )}
-      </Suspense>
-
-      {/* Title + details above the painting (light text for dark walls) */}
-      <Suspense fallback={null}>
-        <Text
-          position={[0, 1.62, 0.02]}
-          fontSize={0.16}
-          color={hovered ? "#e8c874" : "#f2ece0"}
-          anchorX="center"
-          anchorY="bottom"
-          maxWidth={3.2}
-          textAlign="center"
-        >
-          {artwork.title}
-        </Text>
-        <Text
-          position={[0, 1.5, 0.02]}
-          fontSize={0.088}
-          letterSpacing={0.02}
-          color="#b6ad9d"
-          anchorX="center"
-          anchorY="top"
-        >
-          {`${artwork.year} · ${artwork.medium}`}
-        </Text>
       </Suspense>
     </group>
   );

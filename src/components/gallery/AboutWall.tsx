@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
+import { WALL_COLOR } from "@/lib/gallery-theme";
 
 const WALL_HEIGHT = 5;
 const IMG_MAX_H = 3.0;
@@ -72,7 +73,7 @@ export function AboutWall({ z, width }: AboutWallProps) {
       {/* Wall surface */}
       <mesh position={[0, WALL_HEIGHT / 2, 0]}>
         <planeGeometry args={[width, WALL_HEIGHT]} />
-        <meshStandardMaterial color="#efece5" roughness={0.95} />
+        <meshStandardMaterial color={WALL_COLOR} roughness={0.95} />
       </mesh>
 
       {/* Clickable content */}
