@@ -6,6 +6,7 @@ import { MeshReflectorMaterial } from "@react-three/drei";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { Artwork } from "@/types/artwork";
 import { setStops } from "@/lib/guided-nav";
+import { BEAM_COLOR, WALL_COLOR } from "@/lib/gallery-theme";
 import type { TimeMode } from "@/lib/time-of-day";
 import { AboutWall } from "./AboutWall";
 import { BackWall } from "./BackWall";
@@ -22,11 +23,9 @@ const MARGIN = 4;
 const WOOD_TILE_X = 1.2;
 const WOOD_TILE_Z = 3;
 
-// The room itself stays a constant warm plaster/brass; only the sky beyond the
+// The room itself stays constant (see gallery-theme); only the sky beyond the
 // glass roof — and the light falling through it — changes with the hour. Light
 // colours stay near-neutral so the walls never take on a blue/orange cast.
-const WALL_COLOR = "#e5dccb";
-const BEAM_COLOR = "#cfc5b1";
 
 const PALETTES = {
   // Blue skies through the glass roof.

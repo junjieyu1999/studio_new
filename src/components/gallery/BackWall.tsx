@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { TESTIMONIALS, type Testimonial } from "@/lib/testimonials";
+import { WALL_COLOR } from "@/lib/gallery-theme";
 
 const WALL_HEIGHT = 5;
 const INTERVAL_MS = 10000; // time each review is shown
@@ -121,7 +122,7 @@ export function BackWall({ width, z = 0 }: BackWallProps) {
       {/* Wall surface */}
       <mesh position={[0, WALL_HEIGHT / 2, 0]}>
         <planeGeometry args={[width, WALL_HEIGHT]} />
-        <meshStandardMaterial color="#efece5" roughness={0.95} />
+        <meshStandardMaterial color={WALL_COLOR} roughness={0.95} />
       </mesh>
 
       {/* Heading */}
