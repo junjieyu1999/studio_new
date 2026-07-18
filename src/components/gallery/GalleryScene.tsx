@@ -319,11 +319,11 @@ function randomSeed() {
 }
 
 // Smooth pseudo-random flicker: two out-of-phase sines so it never repeats
-// obviously. Returns a 0..1 multiplier around ~0.9.
+// obviously. Swing is ±0.045 around ~0.91 (a gentle, halved flicker).
 function flicker(t: number, seed: number) {
   const a = Math.sin(t * 9.3 + seed) * 0.5 + 0.5;
   const b = Math.sin(t * 5.1 + seed * 3.7) * 0.5 + 0.5;
-  return 0.82 + 0.18 * (a * 0.6 + b * 0.4);
+  return 0.865 + 0.09 * (a * 0.6 + b * 0.4);
 }
 
 // Warm lamp aimed at a single piece, with a gentle candle flicker.
@@ -538,63 +538,8 @@ function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
   );
 }
 
-// Rain streaks for the glass roof (night only): thin vertical strokes on a
-// transparent canvas, scrolled to look like water running across the panes.
-function makeRainTexture(): THREE.CanvasTexture | null {
-  if (typeof document === "undefined") return null;
-  const S = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = S;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.strokeStyle = "rgba(200,220,255,0.5)";
-  ctx.lineCap = "round";
-  for (let i = 0; i < 90; i++) {
-    const x = Math.random() * S;
-    const y = Math.random() * S;
-    const len = 8 + Math.random() * 22;
-    ctx.lineWidth = Math.random() < 0.5 ? 1 : 1.5;
-    ctx.globalAlpha = 0.3 + Math.random() * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + 1.5, y + len);
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(3, 3);
-  return tex;
-}
-
-function RainOnGlass({ length }: { length: number }) {
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
-  const tex = useMemo(() => makeRainTexture(), []);
-  useEffect(() => {
-    const t = tex;
-    return () => t?.dispose();
-  }, [tex]);
-  useFrame((_, delta) => {
-    const map = matRef.current?.map;
-    if (map) map.offset.y -= delta * 0.9; // runs "down" the glass
-  });
-  if (!tex) return null;
-  return (
-    <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, WALL_HEIGHT - 0.02, length / 2]}>
-      <planeGeometry args={[CORRIDOR_WIDTH, length]} />
-      <meshBasicMaterial
-        ref={matRef}
-        map={tex}
-        transparent
-        opacity={0.5}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
-  );
-}
-
 function makeMoteGeometry(length: number): THREE.BufferGeometry {
-  const count = 240;
+  const count = 120;
   const arr = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     arr[i * 3] = (Math.random() - 0.5) * (CORRIDOR_WIDTH - 1);
@@ -625,61 +570,11 @@ function DustMotes({ length }: { length: number }) {
         size={0.035}
         color="#ffe9c8"
         transparent
-        opacity={0.5}
+        opacity={0.25}
         sizeAttenuation
         depthWrite={false}
       />
     </points>
-  );
-}
-
-// Soft runner rug down the centre of the room.
-function makeRugTexture(): THREE.CanvasTexture | null {
-  if (typeof document === "undefined") return null;
-  const w = 128;
-  const h = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = "#7c3b30"; // warm terracotta
-  ctx.fillRect(0, 0, w, h);
-  // border
-  ctx.strokeStyle = "#d8c3a0";
-  ctx.lineWidth = 6;
-  ctx.strokeRect(10, 10, w - 20, h - 20);
-  ctx.strokeStyle = "#c98b5a";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(20, 20, w - 40, h - 40);
-  // centre diamonds
-  ctx.strokeStyle = "rgba(216,195,160,0.6)";
-  ctx.lineWidth = 1.5;
-  for (let y = 40; y < h - 40; y += 46) {
-    ctx.beginPath();
-    ctx.moveTo(w / 2, y);
-    ctx.lineTo(w / 2 + 16, y + 23);
-    ctx.lineTo(w / 2, y + 46);
-    ctx.lineTo(w / 2 - 16, y + 23);
-    ctx.closePath();
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  return tex;
-}
-
-function Rug({ length }: { length: number }) {
-  const tex = useMemo(() => makeRugTexture(), []);
-  useEffect(() => () => tex?.dispose(), [tex]);
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, length / 2]}>
-      <planeGeometry args={[2.2, length - 3.2]} />
-      <meshStandardMaterial
-        map={tex ?? undefined}
-        color={tex ? "#ffffff" : "#7c3b30"}
-        roughness={0.95}
-      />
-    </mesh>
   );
 }
 
@@ -873,9 +768,6 @@ export function GalleryScene({
       <BackWall width={CORRIDOR_WIDTH} z={0} />
       <AboutWall width={CORRIDOR_WIDTH} z={corridorLength} />
 
-      {/* Centre runner rug */}
-      <Rug length={corridorLength} />
-
       {/* Warm wall sconces between the pieces */}
       {sconceZs.map((sz) =>
         [-1, 1].map((s) => (
@@ -904,9 +796,8 @@ export function GalleryScene({
         </group>
       ))}
 
-      {/* Dust drifting in the light; rain on the glass at night */}
+      {/* Dust drifting in the light */}
       <DustMotes length={corridorLength} />
-      {isNight && <RainOnGlass length={corridorLength} />}
 
       <WalkControls bounds={bounds} initialYaw={Math.PI} />
 
