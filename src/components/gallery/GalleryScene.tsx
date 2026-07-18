@@ -43,7 +43,7 @@ const PALETTES = {
     glass: "#bcdcfb",
     glassOpacity: 0.2,
     glassEmissive: 0.5,
-    cloudOpacity: 0.9,
+    cloudOpacity: 0.8,
     spot: 5,
     spotColor: "#fff0d6",
     panel: 6,
@@ -52,12 +52,12 @@ const PALETTES = {
   },
   // Low sun, reddish-orange skies.
   golden: {
-    bg: "#d2743c",
+    bg: "#d16b30",
     fogNear: 22,
     fogFar: 60,
     ambient: 0.6,
     hemiSky: "#fff0dd",
-    hemiGround: "#8a6742",
+    hemiGround: "#9f682e",
     hemi: 0.7,
     sun: 1.05,
     sunColor: "#ffb066",
@@ -387,7 +387,7 @@ function Sconce({
 }) {
   const lightRef = useRef<THREE.PointLight>(null);
   const seed = useMemo(() => randomSeed(), []);
-  const base = mode === "night" ? 4.5 : mode === "golden" ? 2.2 : 0.9;
+  const base = mode === "night" ? 0.2 : mode === "golden" ? 0.5 : 0.3;
 
   useFrame((state) => {
     if (lightRef.current) {
@@ -567,10 +567,10 @@ function DustMotes({ length }: { length: number }) {
   return (
     <points ref={ref} geometry={geometry}>
       <pointsMaterial
-        size={0.035}
+        size={0.02}
         color="#ffe9c8"
         transparent
-        opacity={0.25}
+        opacity={0.1}
         sizeAttenuation
         depthWrite={false}
       />
@@ -588,7 +588,7 @@ export function GalleryScene({
   const palette = PALETTES[mode];
   const isNight = mode === "night";
   // Golden hour sits low on the horizon; midday is overhead.
-  const sunY = mode === "golden" ? 3.5 : 14;
+  const sunY = mode === "golden" ? 2.5 : 14;
 
   const { placed, corridorLength, stops } = useMemo(
     () => layout(artworks),
@@ -603,7 +603,7 @@ export function GalleryScene({
     const tex = makeWoodTexture();
     if (tex) {
       tex.repeat.set(CORRIDOR_WIDTH / WOOD_TILE_X, corridorLength / WOOD_TILE_Z);
-      tex.anisotropy = 8;
+      tex.anisotropy = 10;
     }
     return tex;
   }, [corridorLength]);
