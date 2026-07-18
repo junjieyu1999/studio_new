@@ -347,7 +347,7 @@ function PaintingLight({
   useFrame((state) => {
     if (light.current) {
       light.current.intensity =
-        palette.spot * flicker(state.clock.elapsedTime, seed);
+        palette.spot * 0.5 * flicker(state.clock.elapsedTime, seed);
     }
   });
 
@@ -360,7 +360,7 @@ function PaintingLight({
         position={[x + toward, WALL_HEIGHT - 0.9, z]}
         angle={0.7}
         penumbra={0.95}
-        intensity={palette.spot}
+        intensity={palette.spot * 0.5}
         distance={10}
         decay={2}
         color={palette.spotColor}
@@ -578,44 +578,6 @@ function DustMotes({ length }: { length: number }) {
   );
 }
 
-interface Leaf {
-  p: [number, number, number];
-  s: number;
-  c: string;
-}
-function makePlantLeaves(): Leaf[] {
-  return Array.from({ length: 7 }, () => ({
-    p: [
-      (Math.random() - 0.5) * 0.5,
-      0.5 + Math.random() * 0.7,
-      (Math.random() - 0.5) * 0.5,
-    ] as [number, number, number],
-    s: 0.18 + Math.random() * 0.12,
-    c: Math.random() < 0.5 ? "#3f6b3a" : "#4f7d43",
-  }));
-}
-
-// Simple potted plant to soften a corner.
-function Plant({ x, z }: { x: number; z: number }) {
-  const leaves = useMemo(() => makePlantLeaves(), []);
-  return (
-    <group position={[x, 0, z]}>
-      {/* pot */}
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.22, 0.16, 0.4, 16]} />
-        <meshStandardMaterial color="#8a5a3c" roughness={0.8} />
-      </mesh>
-      {/* foliage clumps */}
-      {leaves.map((l, i) => (
-        <mesh key={i} position={l.p}>
-          <icosahedronGeometry args={[l.s, 0]} />
-          <meshStandardMaterial color={l.c} roughness={0.85} flatShading />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 export function GalleryScene({
   artworks,
   mode,
@@ -670,13 +632,6 @@ export function GalleryScene({
     { length: rows + 1 },
     (_, k) => START_Z - SPACING / 2 + k * SPACING
   ).filter((z) => z > 1 && z < corridorLength - 1);
-  const plantSpots: [number, number][] = [
-    [-(halfW - 0.5), 1.2],
-    [halfW - 0.5, 1.2],
-    [-(halfW - 0.5), corridorLength - 1.2],
-    [halfW - 0.5, corridorLength - 1.2],
-  ];
-
   return (
     <>
       <fog attach="fog" args={[palette.bg, palette.fogNear, palette.fogFar]} />
@@ -781,11 +736,6 @@ export function GalleryScene({
           />
         ))
       )}
-
-      {/* Potted plants in the corners */}
-      {plantSpots.map(([px, pz], i) => (
-        <Plant key={`plant-${i}`} x={px} z={pz} />
-      ))}
 
       {/* Paintings, their lamps, and a bench facing each */}
       {placed.map(({ artwork, position, rotationY }) => (
