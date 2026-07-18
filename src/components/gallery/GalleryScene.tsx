@@ -103,6 +103,44 @@ type Palette = (typeof PALETTES)[TimeMode];
  *   golden — dark, backlit cloud bodies with fiery orange rims
  *   night  — scattered white star specks
  */
+// Vertical gradient sky shown through the glass roof (screen top = up/zenith,
+// screen bottom = toward the horizon).
+function makeGradientBackground(mode: TimeMode): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 8;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const stops: Record<TimeMode, [number, string][]> = {
+    day: [
+      [0, "#7fb0e4"],
+      [1, "#cfe6f6"],
+    ],
+    // orange at the horizon fading up into deep blue
+    golden: [
+      [0, "#16233f"],
+      [0.42, "#7c4a55"],
+      [0.72, "#df8347"],
+      [1, "#f4a44a"],
+    ],
+    night: [
+      [0, "#05060d"],
+      [1, "#111d33"],
+    ],
+  };
+
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  for (const [pos, col] of stops[mode]) g.addColorStop(pos, col);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function makeSkyTexture(mode: TimeMode): THREE.CanvasTexture | null {
   if (typeof document === "undefined") return null;
   const S = 512;
@@ -118,47 +156,63 @@ function makeSkyTexture(mode: TimeMode): THREE.CanvasTexture | null {
   };
 
   if (mode === "night") {
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 110; i++) {
       const x = Math.random() * S;
       const y = Math.random() * S;
-      const r = 0.4 + Math.random() * 1.4;
+      const r = 0.3 + Math.random() * 0.7; // smaller specks
       const a = 0.35 + Math.random() * 0.6;
       tiled(x, y, (px, py) => {
-        const g = ctx.createRadialGradient(px, py, 0, px, py, r * 2.5);
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r * 1.8);
         g.addColorStop(0, `rgba(255,255,255,${a})`);
-        g.addColorStop(0.4, `rgba(255,255,255,${a * 0.5})`);
+        g.addColorStop(0.5, `rgba(255,255,255,${a * 0.4})`);
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(px, py, r * 2.5, 0, Math.PI * 2);
+        ctx.arc(px, py, r * 1.8, 0, Math.PI * 2);
         ctx.fill();
       });
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(2.5, 2.5);
+    tex.repeat.set(2, 2);
     return tex;
   }
 
   const golden = mode === "golden";
 
   const puff = (x: number, y: number, r: number, a: number) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    // Soft, feathered body — a single-colour fade, so overlapping puffs blend
+    // instead of forming concentric rings.
+    const body = ctx.createRadialGradient(x, y, 0, x, y, r);
     if (golden) {
-      // dark body, glowing warm rim, soft fade — reads as backlit cloud
-      g.addColorStop(0, `rgba(58,38,54,${a})`);
-      g.addColorStop(0.55, `rgba(70,45,60,${a * 0.8})`);
-      g.addColorStop(0.8, `rgba(255,150,70,${a * 0.75})`);
-      g.addColorStop(1, "rgba(255,150,70,0)");
+      body.addColorStop(0, `rgba(38,30,48,${a})`);
+      body.addColorStop(0.7, `rgba(38,30,48,${a * 0.55})`);
+      body.addColorStop(1, "rgba(38,30,48,0)");
     } else {
-      g.addColorStop(0, `rgba(255,255,255,${a})`);
-      g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
-      g.addColorStop(1, "rgba(255,255,255,0)");
+      body.addColorStop(0, `rgba(255,255,255,${a})`);
+      body.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
+      body.addColorStop(1, "rgba(255,255,255,0)");
     }
-    ctx.fillStyle = g;
+    ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+
+    if (golden) {
+      // Warm sun-catch on the LEFT edge only, added as light so it glows
+      // without a hard ring.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const gx = x - r * 0.5;
+      const glow = ctx.createRadialGradient(gx, y, 0, gx, y, r * 0.85);
+      glow.addColorStop(0, `rgba(255,150,72,${a * 0.5})`);
+      glow.addColorStop(1, "rgba(255,150,72,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(gx, y, r * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   };
 
   for (let c = 0; c < 9; c++) {
@@ -446,6 +500,13 @@ export function GalleryScene({
     return () => tex?.dispose();
   }, [floorTexture]);
 
+  // Gradient sky, rebuilt per mode.
+  const bgTexture = useMemo(() => makeGradientBackground(mode), [mode]);
+  useEffect(() => {
+    const tex = bgTexture;
+    return () => tex?.dispose();
+  }, [bgTexture]);
+
   const bounds = {
     minX: -CORRIDOR_WIDTH / 2 + 0.7,
     maxX: CORRIDOR_WIDTH / 2 - 0.7,
@@ -458,7 +519,11 @@ export function GalleryScene({
   return (
     <>
       <fog attach="fog" args={[palette.bg, palette.fogNear, palette.fogFar]} />
-      <color attach="background" args={[palette.bg]} />
+      {bgTexture ? (
+        <primitive attach="background" object={bgTexture} />
+      ) : (
+        <color attach="background" args={[palette.bg]} />
+      )}
 
       <ambientLight intensity={palette.ambient} />
       <hemisphereLight
