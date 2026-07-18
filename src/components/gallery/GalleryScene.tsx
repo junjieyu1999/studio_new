@@ -314,7 +314,19 @@ function layout(artworks: Artwork[]) {
   return { placed, corridorLength, stops };
 }
 
-// Warm lamp aimed at a single piece.
+function randomSeed() {
+  return Math.random() * 10;
+}
+
+// Smooth pseudo-random flicker: two out-of-phase sines so it never repeats
+// obviously. Returns a 0..1 multiplier around ~0.9.
+function flicker(t: number, seed: number) {
+  const a = Math.sin(t * 9.3 + seed) * 0.5 + 0.5;
+  const b = Math.sin(t * 5.1 + seed * 3.7) * 0.5 + 0.5;
+  return 0.82 + 0.18 * (a * 0.6 + b * 0.4);
+}
+
+// Warm lamp aimed at a single piece, with a gentle candle flicker.
 function PaintingLight({
   position,
   palette,
@@ -324,12 +336,21 @@ function PaintingLight({
 }) {
   const light = useRef<THREE.SpotLight>(null);
   const target = useRef<THREE.Object3D>(null);
+  const seed = useMemo(() => randomSeed(), []);
   useEffect(() => {
     if (light.current && target.current) {
       light.current.target = target.current;
       light.current.target.updateMatrixWorld();
     }
   });
+
+  useFrame((state) => {
+    if (light.current) {
+      light.current.intensity =
+        palette.spot * flicker(state.clock.elapsedTime, seed);
+    }
+  });
+
   const [x, y, z] = position;
   const toward = x < 0 ? 1.1 : -1.1;
   return (
@@ -346,6 +367,57 @@ function PaintingLight({
       />
       <object3D ref={target} position={[x, y, z]} />
     </>
+  );
+}
+
+// Warm wall sconce: a small emissive fixture + a flickering point light. The
+// glow is strongest at night, where the cozy factor matters most.
+function Sconce({
+  x,
+  z,
+  facing,
+  palette,
+  mode,
+}: {
+  x: number;
+  z: number;
+  facing: number; // +1 or -1: which way the light spills into the room
+  palette: Palette;
+  mode: TimeMode;
+}) {
+  const lightRef = useRef<THREE.PointLight>(null);
+  const seed = useMemo(() => randomSeed(), []);
+  const base = mode === "night" ? 4.5 : mode === "golden" ? 2.2 : 0.9;
+
+  useFrame((state) => {
+    if (lightRef.current) {
+      lightRef.current.intensity = base * flicker(state.clock.elapsedTime, seed);
+    }
+  });
+
+  return (
+    <group position={[x, 2.5, z]}>
+      {/* little brass shade */}
+      <mesh>
+        <cylinderGeometry args={[0.05, 0.11, 0.26, 12, 1, true]} />
+        <meshStandardMaterial
+          color="#caa25a"
+          emissive={palette.spotColor}
+          emissiveIntensity={mode === "night" ? 1.6 : 0.5}
+          metalness={0.6}
+          roughness={0.4}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <pointLight
+        ref={lightRef}
+        position={[facing * 0.35, 0, 0]}
+        intensity={base}
+        distance={4.5}
+        decay={2}
+        color={palette.spotColor}
+      />
+    </group>
   );
 }
 
@@ -466,6 +538,189 @@ function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
   );
 }
 
+// Rain streaks for the glass roof (night only): thin vertical strokes on a
+// transparent canvas, scrolled to look like water running across the panes.
+function makeRainTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const S = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.strokeStyle = "rgba(200,220,255,0.5)";
+  ctx.lineCap = "round";
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const len = 8 + Math.random() * 22;
+    ctx.lineWidth = Math.random() < 0.5 ? 1 : 1.5;
+    ctx.globalAlpha = 0.3 + Math.random() * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 1.5, y + len);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  return tex;
+}
+
+function RainOnGlass({ length }: { length: number }) {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const tex = useMemo(() => makeRainTexture(), []);
+  useEffect(() => {
+    const t = tex;
+    return () => t?.dispose();
+  }, [tex]);
+  useFrame((_, delta) => {
+    const map = matRef.current?.map;
+    if (map) map.offset.y -= delta * 0.9; // runs "down" the glass
+  });
+  if (!tex) return null;
+  return (
+    <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, WALL_HEIGHT - 0.02, length / 2]}>
+      <planeGeometry args={[CORRIDOR_WIDTH, length]} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={tex}
+        transparent
+        opacity={0.5}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+function makeMoteGeometry(length: number): THREE.BufferGeometry {
+  const count = 240;
+  const arr = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    arr[i * 3] = (Math.random() - 0.5) * (CORRIDOR_WIDTH - 1);
+    arr[i * 3 + 1] = 0.4 + Math.random() * (WALL_HEIGHT - 1);
+    arr[i * 3 + 2] = Math.random() * length;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+
+// Slow-floating dust caught in the light.
+function DustMotes({ length }: { length: number }) {
+  const ref = useRef<THREE.Points>(null);
+  const geometry = useMemo(() => makeMoteGeometry(length), [length]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    ref.current.position.y = Math.sin(t * 0.18) * 0.12;
+    ref.current.position.x = Math.sin(t * 0.11) * 0.08;
+  });
+
+  return (
+    <points ref={ref} geometry={geometry}>
+      <pointsMaterial
+        size={0.035}
+        color="#ffe9c8"
+        transparent
+        opacity={0.5}
+        sizeAttenuation
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+// Soft runner rug down the centre of the room.
+function makeRugTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const w = 128;
+  const h = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#7c3b30"; // warm terracotta
+  ctx.fillRect(0, 0, w, h);
+  // border
+  ctx.strokeStyle = "#d8c3a0";
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 10, w - 20, h - 20);
+  ctx.strokeStyle = "#c98b5a";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, w - 40, h - 40);
+  // centre diamonds
+  ctx.strokeStyle = "rgba(216,195,160,0.6)";
+  ctx.lineWidth = 1.5;
+  for (let y = 40; y < h - 40; y += 46) {
+    ctx.beginPath();
+    ctx.moveTo(w / 2, y);
+    ctx.lineTo(w / 2 + 16, y + 23);
+    ctx.lineTo(w / 2, y + 46);
+    ctx.lineTo(w / 2 - 16, y + 23);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function Rug({ length }: { length: number }) {
+  const tex = useMemo(() => makeRugTexture(), []);
+  useEffect(() => () => tex?.dispose(), [tex]);
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, length / 2]}>
+      <planeGeometry args={[2.2, length - 3.2]} />
+      <meshStandardMaterial
+        map={tex ?? undefined}
+        color={tex ? "#ffffff" : "#7c3b30"}
+        roughness={0.95}
+      />
+    </mesh>
+  );
+}
+
+interface Leaf {
+  p: [number, number, number];
+  s: number;
+  c: string;
+}
+function makePlantLeaves(): Leaf[] {
+  return Array.from({ length: 7 }, () => ({
+    p: [
+      (Math.random() - 0.5) * 0.5,
+      0.5 + Math.random() * 0.7,
+      (Math.random() - 0.5) * 0.5,
+    ] as [number, number, number],
+    s: 0.18 + Math.random() * 0.12,
+    c: Math.random() < 0.5 ? "#3f6b3a" : "#4f7d43",
+  }));
+}
+
+// Simple potted plant to soften a corner.
+function Plant({ x, z }: { x: number; z: number }) {
+  const leaves = useMemo(() => makePlantLeaves(), []);
+  return (
+    <group position={[x, 0, z]}>
+      {/* pot */}
+      <mesh position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.22, 0.16, 0.4, 16]} />
+        <meshStandardMaterial color="#8a5a3c" roughness={0.8} />
+      </mesh>
+      {/* foliage clumps */}
+      {leaves.map((l, i) => (
+        <mesh key={i} position={l.p}>
+          <icosahedronGeometry args={[l.s, 0]} />
+          <meshStandardMaterial color={l.c} roughness={0.85} flatShading />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 export function GalleryScene({
   artworks,
   mode,
@@ -515,6 +770,17 @@ export function GalleryScene({
   };
 
   const halfW = CORRIDOR_WIDTH / 2;
+  const rows = Math.max(1, Math.ceil(artworks.length / 2));
+  const sconceZs = Array.from(
+    { length: rows + 1 },
+    (_, k) => START_Z - SPACING / 2 + k * SPACING
+  ).filter((z) => z > 1 && z < corridorLength - 1);
+  const plantSpots: [number, number][] = [
+    [-(halfW - 0.5), 1.2],
+    [halfW - 0.5, 1.2],
+    [-(halfW - 0.5), corridorLength - 1.2],
+    [halfW - 0.5, corridorLength - 1.2],
+  ];
 
   return (
     <>
@@ -607,6 +873,28 @@ export function GalleryScene({
       <BackWall width={CORRIDOR_WIDTH} z={0} />
       <AboutWall width={CORRIDOR_WIDTH} z={corridorLength} />
 
+      {/* Centre runner rug */}
+      <Rug length={corridorLength} />
+
+      {/* Warm wall sconces between the pieces */}
+      {sconceZs.map((sz) =>
+        [-1, 1].map((s) => (
+          <Sconce
+            key={`sconce${s}-${sz}`}
+            x={s * (halfW - 0.12)}
+            z={sz}
+            facing={-s}
+            palette={palette}
+            mode={mode}
+          />
+        ))
+      )}
+
+      {/* Potted plants in the corners */}
+      {plantSpots.map(([px, pz], i) => (
+        <Plant key={`plant-${i}`} x={px} z={pz} />
+      ))}
+
       {/* Paintings, their lamps, and a bench facing each */}
       {placed.map(({ artwork, position, rotationY }) => (
         <group key={artwork.id}>
@@ -615,6 +903,10 @@ export function GalleryScene({
           <Bench x={position[0]} z={position[2]} />
         </group>
       ))}
+
+      {/* Dust drifting in the light; rain on the glass at night */}
+      <DustMotes length={corridorLength} />
+      {isNight && <RainOnGlass length={corridorLength} />}
 
       <WalkControls bounds={bounds} initialYaw={Math.PI} />
 
