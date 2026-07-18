@@ -43,8 +43,7 @@ const PALETTES = {
     glass: "#bcdcfb",
     glassOpacity: 0.2,
     glassEmissive: 0.5,
-    cloud: "#ffffff",
-    cloudOpacity: 0.9,
+    cloudOpacity: 0.8,
     spot: 5,
     spotColor: "#fff0d6",
     panel: 6,
@@ -53,20 +52,19 @@ const PALETTES = {
   },
   // Low sun, reddish-orange skies.
   golden: {
-    bg: "#dd9a55",
+    bg: "#d16b30",
     fogNear: 22,
     fogFar: 60,
     ambient: 0.6,
     hemiSky: "#fff0dd",
-    hemiGround: "#8a6742",
+    hemiGround: "#9f682e",
     hemi: 0.7,
     sun: 1.05,
     sunColor: "#ffb066",
     glass: "#ffab5e",
     glassOpacity: 0.3,
     glassEmissive: 0.75,
-    cloud: "#ffbe95",
-    cloudOpacity: 0.95,
+    cloudOpacity: 1,
     spot: 8,
     spotColor: "#ffd39a",
     panel: 8,
@@ -86,8 +84,7 @@ const PALETTES = {
     glass: "#070a14",
     glassOpacity: 0.62,
     glassEmissive: 0.04,
-    cloud: "#2b3450",
-    cloudOpacity: 0.55,
+    cloudOpacity: 0.8,
     spot: 18,
     spotColor: "#ffcf8f",
     panel: 11,
@@ -99,11 +96,52 @@ const PALETTES = {
 type Palette = (typeof PALETTES)[TimeMode];
 
 /**
- * Soft cumulus painted onto a transparent canvas. Every puff is drawn nine
- * times (offset by ±one tile) so the texture wraps seamlessly and can be
+ * Sky painted onto a transparent canvas, per time of day. Everything is drawn
+ * nine times (offset by ±one tile) so the texture wraps seamlessly and can be
  * scrolled forever without a visible seam.
+ *   day    — soft white cumulus
+ *   golden — dark, backlit cloud bodies with fiery orange rims
+ *   night  — scattered white star specks
  */
-function makeCloudTexture(): THREE.CanvasTexture | null {
+// Vertical gradient sky shown through the glass roof (screen top = up/zenith,
+// screen bottom = toward the horizon).
+function makeGradientBackground(mode: TimeMode): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 8;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const stops: Record<TimeMode, [number, string][]> = {
+    day: [
+      [0, "#7fb0e4"],
+      [1, "#cfe6f6"],
+    ],
+    // orange at the horizon fading up into deep blue
+    golden: [
+      [0, "#16233f"],
+      [0.42, "#7c4a55"],
+      [0.72, "#df8347"],
+      [1, "#f4a44a"],
+    ],
+    night: [
+      [0, "#05060d"],
+      [1, "#111d33"],
+    ],
+  };
+
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  for (const [pos, col] of stops[mode]) g.addColorStop(pos, col);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeSkyTexture(mode: TimeMode): THREE.CanvasTexture | null {
   if (typeof document === "undefined") return null;
   const S = 512;
   const canvas = document.createElement("canvas");
@@ -111,15 +149,70 @@ function makeCloudTexture(): THREE.CanvasTexture | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
+  // Draw `fn` at the point and its 8 wrap-around copies.
+  const tiled = (x: number, y: number, fn: (x: number, y: number) => void) => {
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++) fn(x + dx * S, y + dy * S);
+  };
+
+  if (mode === "night") {
+    for (let i = 0; i < 110; i++) {
+      const x = Math.random() * S;
+      const y = Math.random() * S;
+      const r = 0.3 + Math.random() * 0.7; // smaller specks
+      const a = 0.35 + Math.random() * 0.6;
+      tiled(x, y, (px, py) => {
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r * 1.8);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(0.5, `rgba(255,255,255,${a * 0.4})`);
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 2);
+    return tex;
+  }
+
+  const golden = mode === "golden";
+
   const puff = (x: number, y: number, r: number, a: number) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
+    // Soft, feathered body — a single-colour fade, so overlapping puffs blend
+    // instead of forming concentric rings.
+    const body = ctx.createRadialGradient(x, y, 0, x, y, r);
+    if (golden) {
+      body.addColorStop(0, `rgba(38,30,48,${a})`);
+      body.addColorStop(0.7, `rgba(38,30,48,${a * 0.55})`);
+      body.addColorStop(1, "rgba(38,30,48,0)");
+    } else {
+      body.addColorStop(0, `rgba(255,255,255,${a})`);
+      body.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
+      body.addColorStop(1, "rgba(255,255,255,0)");
+    }
+    ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+
+    if (golden) {
+      // Warm sun-catch on the LEFT edge only, added as light so it glows
+      // without a hard ring.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const gx = x - r * 0.5;
+      const glow = ctx.createRadialGradient(gx, y, 0, gx, y, r * 0.85);
+      glow.addColorStop(0, `rgba(255,150,72,${a * 0.5})`);
+      glow.addColorStop(1, "rgba(255,150,72,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(gx, y, r * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   };
 
   for (let c = 0; c < 9; c++) {
@@ -130,12 +223,8 @@ function makeCloudTexture(): THREE.CanvasTexture | null {
       const ox = cx + (Math.random() - 0.5) * 130;
       const oy = cy + (Math.random() - 0.5) * 60;
       const r = 30 + Math.random() * 55;
-      const a = 0.3 + Math.random() * 0.3;
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          puff(ox + dx * S, oy + dy * S, r, a);
-        }
-      }
+      const a = golden ? 0.55 + Math.random() * 0.35 : 0.3 + Math.random() * 0.3;
+      tiled(ox, oy, (px, py) => puff(px, py, r, a));
     }
   }
 
@@ -225,7 +314,19 @@ function layout(artworks: Artwork[]) {
   return { placed, corridorLength, stops };
 }
 
-// Warm lamp aimed at a single piece.
+function randomSeed() {
+  return Math.random() * 10;
+}
+
+// Smooth pseudo-random flicker: two out-of-phase sines so it never repeats
+// obviously. Swing is ±0.045 around ~0.91 (a gentle, halved flicker).
+function flicker(t: number, seed: number) {
+  const a = Math.sin(t * 9.3 + seed) * 0.5 + 0.5;
+  const b = Math.sin(t * 5.1 + seed * 3.7) * 0.5 + 0.5;
+  return 0.865 + 0.09 * (a * 0.6 + b * 0.4);
+}
+
+// Warm lamp aimed at a single piece, with a gentle candle flicker.
 function PaintingLight({
   position,
   palette,
@@ -235,12 +336,21 @@ function PaintingLight({
 }) {
   const light = useRef<THREE.SpotLight>(null);
   const target = useRef<THREE.Object3D>(null);
+  const seed = useMemo(() => randomSeed(), []);
   useEffect(() => {
     if (light.current && target.current) {
       light.current.target = target.current;
       light.current.target.updateMatrixWorld();
     }
   });
+
+  useFrame((state) => {
+    if (light.current) {
+      light.current.intensity =
+        palette.spot * 0.5 * flicker(state.clock.elapsedTime, seed);
+    }
+  });
+
   const [x, y, z] = position;
   const toward = x < 0 ? 1.1 : -1.1;
   return (
@@ -250,13 +360,64 @@ function PaintingLight({
         position={[x + toward, WALL_HEIGHT - 0.9, z]}
         angle={0.7}
         penumbra={0.95}
-        intensity={palette.spot}
+        intensity={palette.spot * 0.5}
         distance={10}
         decay={2}
         color={palette.spotColor}
       />
       <object3D ref={target} position={[x, y, z]} />
     </>
+  );
+}
+
+// Warm wall sconce: a small emissive fixture + a flickering point light. The
+// glow is strongest at night, where the cozy factor matters most.
+function Sconce({
+  x,
+  z,
+  facing,
+  palette,
+  mode,
+}: {
+  x: number;
+  z: number;
+  facing: number; // +1 or -1: which way the light spills into the room
+  palette: Palette;
+  mode: TimeMode;
+}) {
+  const lightRef = useRef<THREE.PointLight>(null);
+  const seed = useMemo(() => randomSeed(), []);
+  const base = mode === "night" ? 0.2 : mode === "golden" ? 0.5 : 0.3;
+
+  useFrame((state) => {
+    if (lightRef.current) {
+      lightRef.current.intensity = base * flicker(state.clock.elapsedTime, seed);
+    }
+  });
+
+  return (
+    <group position={[x, 2.5, z]}>
+      {/* little brass shade */}
+      <mesh>
+        <cylinderGeometry args={[0.05, 0.11, 0.26, 12, 1, true]} />
+        <meshStandardMaterial
+          color="#caa25a"
+          emissive={palette.spotColor}
+          emissiveIntensity={mode === "night" ? 1.6 : 0.5}
+          metalness={0.6}
+          roughness={0.4}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <pointLight
+        ref={lightRef}
+        position={[facing * 0.35, 0, 0]}
+        intensity={base}
+        distance={4.5}
+        decay={2}
+        color={palette.spotColor}
+      />
+    </group>
   );
 }
 
@@ -287,21 +448,32 @@ function Bench({ x, z }: { x: number; z: number }) {
  * the room — and tinted per palette so it turns pink at golden hour and dark
  * at night.
  */
-function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
+function CloudLayer({
+  length,
+  palette,
+  mode,
+}: {
+  length: number;
+  palette: Palette;
+  mode: TimeMode;
+}) {
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
 
-  const tex = useMemo(() => makeCloudTexture(), []);
+  // Colours are baked into the texture, so it is rebuilt when the mode changes.
+  const tex = useMemo(() => makeSkyTexture(mode), [mode]);
   useEffect(() => {
     const t = tex;
     return () => t?.dispose();
   }, [tex]);
 
+  // Stars barely move; clouds drift at a comfortable clip.
+  const speed = mode === "night" ? 0.0016 : 0.011;
+
   useFrame((_, delta) => {
     const map = matRef.current?.map;
     if (!map) return;
-    // slow drift; the seamless wrap means this can run indefinitely
-    map.offset.x += delta * 0.0035;
-    map.offset.y += delta * 0.0012;
+    map.offset.x += delta * speed;
+    map.offset.y += delta * speed * 0.35;
   });
 
   if (!tex) return null;
@@ -316,7 +488,6 @@ function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
       <meshBasicMaterial
         ref={matRef}
         map={tex}
-        color={palette.cloud}
         transparent
         opacity={palette.cloudOpacity}
         depthWrite={false}
@@ -367,6 +538,46 @@ function GlassRoof({ length, palette }: { length: number; palette: Palette }) {
   );
 }
 
+function makeMoteGeometry(length: number): THREE.BufferGeometry {
+  const count = 120;
+  const arr = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    arr[i * 3] = (Math.random() - 0.5) * (CORRIDOR_WIDTH - 1);
+    arr[i * 3 + 1] = 0.4 + Math.random() * (WALL_HEIGHT - 1);
+    arr[i * 3 + 2] = Math.random() * length;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+
+// Slow-floating dust caught in the light.
+function DustMotes({ length }: { length: number }) {
+  const ref = useRef<THREE.Points>(null);
+  const geometry = useMemo(() => makeMoteGeometry(length), [length]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    ref.current.position.y = Math.sin(t * 0.18) * 0.12;
+    ref.current.position.x = Math.sin(t * 0.11) * 0.08;
+  });
+
+  return (
+    <points ref={ref} geometry={geometry}>
+      <pointsMaterial
+        size={0.02}
+        color="#ffe9c8"
+        transparent
+        opacity={0.1}
+        sizeAttenuation
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
 export function GalleryScene({
   artworks,
   mode,
@@ -377,7 +588,7 @@ export function GalleryScene({
   const palette = PALETTES[mode];
   const isNight = mode === "night";
   // Golden hour sits low on the horizon; midday is overhead.
-  const sunY = mode === "golden" ? 3.5 : 14;
+  const sunY = mode === "golden" ? 2.5 : 14;
 
   const { placed, corridorLength, stops } = useMemo(
     () => layout(artworks),
@@ -392,7 +603,7 @@ export function GalleryScene({
     const tex = makeWoodTexture();
     if (tex) {
       tex.repeat.set(CORRIDOR_WIDTH / WOOD_TILE_X, corridorLength / WOOD_TILE_Z);
-      tex.anisotropy = 8;
+      tex.anisotropy = 10;
     }
     return tex;
   }, [corridorLength]);
@@ -400,6 +611,13 @@ export function GalleryScene({
     const tex = floorTexture;
     return () => tex?.dispose();
   }, [floorTexture]);
+
+  // Gradient sky, rebuilt per mode.
+  const bgTexture = useMemo(() => makeGradientBackground(mode), [mode]);
+  useEffect(() => {
+    const tex = bgTexture;
+    return () => tex?.dispose();
+  }, [bgTexture]);
 
   const bounds = {
     minX: -CORRIDOR_WIDTH / 2 + 0.7,
@@ -409,11 +627,19 @@ export function GalleryScene({
   };
 
   const halfW = CORRIDOR_WIDTH / 2;
-
+  const rows = Math.max(1, Math.ceil(artworks.length / 2));
+  const sconceZs = Array.from(
+    { length: rows + 1 },
+    (_, k) => START_Z - SPACING / 2 + k * SPACING
+  ).filter((z) => z > 1 && z < corridorLength - 1);
   return (
     <>
       <fog attach="fog" args={[palette.bg, palette.fogNear, palette.fogFar]} />
-      <color attach="background" args={[palette.bg]} />
+      {bgTexture ? (
+        <primitive attach="background" object={bgTexture} />
+      ) : (
+        <color attach="background" args={[palette.bg]} />
+      )}
 
       <ambientLight intensity={palette.ambient} />
       <hemisphereLight
@@ -443,7 +669,7 @@ export function GalleryScene({
         color={palette.spotColor}
       />
 
-      <CloudLayer length={corridorLength} palette={palette} />
+      <CloudLayer length={corridorLength} palette={palette} mode={mode} />
       <GlassRoof length={corridorLength} palette={palette} />
 
       {/* Wooden floor */}
@@ -497,6 +723,20 @@ export function GalleryScene({
       <BackWall width={CORRIDOR_WIDTH} z={0} />
       <AboutWall width={CORRIDOR_WIDTH} z={corridorLength} />
 
+      {/* Warm wall sconces between the pieces */}
+      {sconceZs.map((sz) =>
+        [-1, 1].map((s) => (
+          <Sconce
+            key={`sconce${s}-${sz}`}
+            x={s * (halfW - 0.12)}
+            z={sz}
+            facing={-s}
+            palette={palette}
+            mode={mode}
+          />
+        ))
+      )}
+
       {/* Paintings, their lamps, and a bench facing each */}
       {placed.map(({ artwork, position, rotationY }) => (
         <group key={artwork.id}>
@@ -505,6 +745,9 @@ export function GalleryScene({
           <Bench x={position[0]} z={position[2]} />
         </group>
       ))}
+
+      {/* Dust drifting in the light */}
+      <DustMotes length={corridorLength} />
 
       <WalkControls bounds={bounds} initialYaw={Math.PI} />
 
