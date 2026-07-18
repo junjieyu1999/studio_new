@@ -43,7 +43,6 @@ const PALETTES = {
     glass: "#bcdcfb",
     glassOpacity: 0.2,
     glassEmissive: 0.5,
-    cloud: "#ffffff",
     cloudOpacity: 0.9,
     spot: 5,
     spotColor: "#fff0d6",
@@ -53,7 +52,7 @@ const PALETTES = {
   },
   // Low sun, reddish-orange skies.
   golden: {
-    bg: "#dd9a55",
+    bg: "#d2743c",
     fogNear: 22,
     fogFar: 60,
     ambient: 0.6,
@@ -65,8 +64,7 @@ const PALETTES = {
     glass: "#ffab5e",
     glassOpacity: 0.3,
     glassEmissive: 0.75,
-    cloud: "#ffbe95",
-    cloudOpacity: 0.95,
+    cloudOpacity: 1,
     spot: 8,
     spotColor: "#ffd39a",
     panel: 8,
@@ -86,8 +84,7 @@ const PALETTES = {
     glass: "#070a14",
     glassOpacity: 0.62,
     glassEmissive: 0.04,
-    cloud: "#2b3450",
-    cloudOpacity: 0.55,
+    cloudOpacity: 0.8,
     spot: 18,
     spotColor: "#ffcf8f",
     panel: 11,
@@ -99,11 +96,14 @@ const PALETTES = {
 type Palette = (typeof PALETTES)[TimeMode];
 
 /**
- * Soft cumulus painted onto a transparent canvas. Every puff is drawn nine
- * times (offset by ±one tile) so the texture wraps seamlessly and can be
+ * Sky painted onto a transparent canvas, per time of day. Everything is drawn
+ * nine times (offset by ±one tile) so the texture wraps seamlessly and can be
  * scrolled forever without a visible seam.
+ *   day    — soft white cumulus
+ *   golden — dark, backlit cloud bodies with fiery orange rims
+ *   night  — scattered white star specks
  */
-function makeCloudTexture(): THREE.CanvasTexture | null {
+function makeSkyTexture(mode: TimeMode): THREE.CanvasTexture | null {
   if (typeof document === "undefined") return null;
   const S = 512;
   const canvas = document.createElement("canvas");
@@ -111,11 +111,50 @@ function makeCloudTexture(): THREE.CanvasTexture | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
+  // Draw `fn` at the point and its 8 wrap-around copies.
+  const tiled = (x: number, y: number, fn: (x: number, y: number) => void) => {
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++) fn(x + dx * S, y + dy * S);
+  };
+
+  if (mode === "night") {
+    for (let i = 0; i < 260; i++) {
+      const x = Math.random() * S;
+      const y = Math.random() * S;
+      const r = 0.4 + Math.random() * 1.4;
+      const a = 0.35 + Math.random() * 0.6;
+      tiled(x, y, (px, py) => {
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r * 2.5);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(0.4, `rgba(255,255,255,${a * 0.5})`);
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, r * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2.5, 2.5);
+    return tex;
+  }
+
+  const golden = mode === "golden";
+
   const puff = (x: number, y: number, r: number, a: number) => {
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
+    if (golden) {
+      // dark body, glowing warm rim, soft fade — reads as backlit cloud
+      g.addColorStop(0, `rgba(58,38,54,${a})`);
+      g.addColorStop(0.55, `rgba(70,45,60,${a * 0.8})`);
+      g.addColorStop(0.8, `rgba(255,150,70,${a * 0.75})`);
+      g.addColorStop(1, "rgba(255,150,70,0)");
+    } else {
+      g.addColorStop(0, `rgba(255,255,255,${a})`);
+      g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+    }
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -130,12 +169,8 @@ function makeCloudTexture(): THREE.CanvasTexture | null {
       const ox = cx + (Math.random() - 0.5) * 130;
       const oy = cy + (Math.random() - 0.5) * 60;
       const r = 30 + Math.random() * 55;
-      const a = 0.3 + Math.random() * 0.3;
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          puff(ox + dx * S, oy + dy * S, r, a);
-        }
-      }
+      const a = golden ? 0.55 + Math.random() * 0.35 : 0.3 + Math.random() * 0.3;
+      tiled(ox, oy, (px, py) => puff(px, py, r, a));
     }
   }
 
@@ -287,21 +322,32 @@ function Bench({ x, z }: { x: number; z: number }) {
  * the room — and tinted per palette so it turns pink at golden hour and dark
  * at night.
  */
-function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
+function CloudLayer({
+  length,
+  palette,
+  mode,
+}: {
+  length: number;
+  palette: Palette;
+  mode: TimeMode;
+}) {
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
 
-  const tex = useMemo(() => makeCloudTexture(), []);
+  // Colours are baked into the texture, so it is rebuilt when the mode changes.
+  const tex = useMemo(() => makeSkyTexture(mode), [mode]);
   useEffect(() => {
     const t = tex;
     return () => t?.dispose();
   }, [tex]);
 
+  // Stars barely move; clouds drift at a comfortable clip.
+  const speed = mode === "night" ? 0.0016 : 0.011;
+
   useFrame((_, delta) => {
     const map = matRef.current?.map;
     if (!map) return;
-    // slow drift; the seamless wrap means this can run indefinitely
-    map.offset.x += delta * 0.0035;
-    map.offset.y += delta * 0.0012;
+    map.offset.x += delta * speed;
+    map.offset.y += delta * speed * 0.35;
   });
 
   if (!tex) return null;
@@ -316,7 +362,6 @@ function CloudLayer({ length, palette }: { length: number; palette: Palette }) {
       <meshBasicMaterial
         ref={matRef}
         map={tex}
-        color={palette.cloud}
         transparent
         opacity={palette.cloudOpacity}
         depthWrite={false}
@@ -443,7 +488,7 @@ export function GalleryScene({
         color={palette.spotColor}
       />
 
-      <CloudLayer length={corridorLength} palette={palette} />
+      <CloudLayer length={corridorLength} palette={palette} mode={mode} />
       <GlassRoof length={corridorLength} palette={palette} />
 
       {/* Wooden floor */}
