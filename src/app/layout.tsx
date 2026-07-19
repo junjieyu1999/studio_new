@@ -1,25 +1,14 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Outfit, JetBrains_Mono } from "next/font/google";
+import { Cormorant_Garamond } from "next/font/google";
 import { ContactWidget } from "@/components/ContactWidget";
 import "./globals.css";
 
-const serif = Cormorant_Garamond({
+// Cormorant Garamond is used site-wide (see globals.css, where all font tokens
+// resolve to this variable).
+const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700"],
   variable: "--ff-serif",
-  display: "swap",
-});
-
-const sans = Outfit({
-  subsets: ["latin"],
-  variable: "--ff-sans",
-  display: "swap",
-});
-
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--ff-mono",
   display: "swap",
 });
 
@@ -34,10 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${serif.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
-    >
+    <html lang="en" className={`${cormorant.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
         <ContactWidget />
