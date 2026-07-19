@@ -8,9 +8,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--ff-sans), system-ui, sans-serif;
+  /* Cormorant Garamond everywhere — sans/serif/mono all resolve to it. */
+  --font-sans: var(--ff-serif), Georgia, serif;
   --font-serif: var(--ff-serif), Georgia, serif;
-  --font-mono: var(--ff-mono), monospace;
+  --font-mono: var(--ff-serif), Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,7 +24,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--ff-sans), system-ui, Arial, sans-serif;
+  font-family: var(--ff-serif), Georgia, serif;
 }
 
 @keyframes fadeIn {
