@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
+import Link from "next/link";
 import { Suspense, useState, useSyncExternalStore } from "react";
 import { Artwork } from "@/types/artwork";
 import { MODE_ORDER, timeOfDayStore, type TimeMode } from "@/lib/time-of-day";
@@ -57,6 +58,18 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
           THE GALLERY
         </h1>
       </div>
+
+      {/* Escape hatch to the simple grid view */}
+      <Link
+        href="/browse"
+        className={`pointer-events-auto absolute left-5 top-5 z-20 rounded-full border px-4 py-2 text-sm backdrop-blur-sm transition ${
+          light
+            ? "border-black/10 bg-white/55 text-[#4a4034] hover:bg-white/75"
+            : "border-white/20 bg-black/45 text-white/90 hover:bg-white/15"
+        }`}
+      >
+        ☰ Simple view
+      </Link>
 
       {/* Daylight / golden hour / evening — follows local time, tap to cycle */}
       <button
