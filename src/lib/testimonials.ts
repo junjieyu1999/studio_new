@@ -8,7 +8,7 @@ export interface Testimonial {
 export const TESTIMONIALS: Testimonial[] = [
   {
     quote:
-      "the work is genuinely so beautiful — you're very talented and thoughtful, and the attention to detail is actually crazy. you can really feel the care and intention behind it, which makes it feel super personal and meaningful. honestly, you have such a good eye 🥹✨ and i'm always left wanting more of your art",
+      "The work is genuinely so beautiful — you're very talented and thoughtful, and the attention to detail is actually crazy. you can really feel the care and intention behind it, which makes it feel super personal and meaningful. honestly, you have such a good eye 🥹✨ and i'm always left wanting more of your art",
     name: "Estefanía Fernández Pokou",
     context: "Commission · Watercolour · 2025",
   },

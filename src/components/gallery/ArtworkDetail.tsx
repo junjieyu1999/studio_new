@@ -3,7 +3,31 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatPrice } from "@/lib/format";
+import {
+  commissionMailto,
+  inquiryMailto,
+  instagramUrl,
+} from "@/lib/contact";
 import { ArtworkWithImages } from "@/types/artwork";
+
+function InstagramGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function MailGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
+    </svg>
+  );
+}
 
 const STATUS_LABEL: Record<ArtworkWithImages["status"], string> = {
   available: "Available",
@@ -98,6 +122,48 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
                 {formatPrice(artwork.price) ?? "Price on request"}
               </span>
             )}
+          </div>
+
+          {/* Buy / enquire */}
+          <div className="mt-6 rounded-2xl border border-[#8b6842]/25 bg-[#8b6842]/[0.05] p-5">
+            <p className="font-serif text-xl">
+              {artwork.status === "sold"
+                ? "This piece is sold"
+                : "Interested in this piece?"}
+            </p>
+            <p className="mt-1 text-sm text-[#1c1a17]/65">
+              {artwork.status === "sold"
+                ? "Get in touch about similar work or a commission."
+                : "Message me to buy or ask a question — I'll get right back to you."}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href={inquiryMailto(artwork.title)}
+                className="inline-flex items-center gap-2 rounded-full bg-[#8b6842] px-5 py-3 text-base font-medium text-white transition hover:opacity-90"
+              >
+                <MailGlyph />
+                Enquire by email
+              </a>
+              <a
+                href={instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-[#1c1a17]/20 px-5 py-3 text-base font-medium transition hover:bg-black/[0.04]"
+              >
+                <InstagramGlyph />
+                Message on Instagram
+              </a>
+            </div>
+            <p className="mt-4 text-sm text-[#1c1a17]/60">
+              Also open for commissions —{" "}
+              <a
+                href={commissionMailto()}
+                className="text-[#8b6842] underline underline-offset-2"
+              >
+                request a custom piece
+              </a>
+              .
+            </p>
           </div>
 
           {artwork.description && (

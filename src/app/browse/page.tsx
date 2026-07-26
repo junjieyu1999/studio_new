@@ -28,6 +28,12 @@ export default async function BrowsePage() {
               About
             </Link>
             <Link
+              href="/about#contact"
+              className="rounded-full border border-black/15 px-4 py-2 text-base transition hover:bg-black/[0.04]"
+            >
+              Commissions
+            </Link>
+            <Link
               href="/"
               className="rounded-full bg-[#8b6842] px-4 py-2 text-base text-white transition hover:opacity-90"
             >

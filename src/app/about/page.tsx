@@ -3,6 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import {
+  CONTACT,
+  commissionMailto,
+  emailUrl,
+  instagramUrl,
+} from "@/lib/contact";
 
 const PHILOSOPHY = [
   {
@@ -243,6 +249,47 @@ export default function AboutPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Commissions & enquiries */}
+      <section id="contact" className="border-t border-black/10 bg-[#efece5]">
+        <div className="mx-auto max-w-5xl px-6 py-16 sm:px-10">
+          <h2 className="mb-2 inline-block border-b border-black/10 pb-2 font-mono text-[0.6rem] uppercase tracking-[0.2em] text-[#8b6842]">
+            Commissions & enquiries
+          </h2>
+          <h3 className="mb-4 font-serif text-3xl font-light sm:text-4xl">
+            Buy a piece, or commission your own
+          </h3>
+          <p className="max-w-xl text-[0.95rem] leading-relaxed text-[#1c1a17]/70">
+            To purchase an available work or ask about anything, send a message —
+            by email or on Instagram. Commissions are open too: tell me the
+            subject, size, and budget you have in mind and we&rsquo;ll take it
+            from there.
+          </p>
+
+          <div className="mt-7 flex flex-wrap gap-3">
+            <a
+              href={commissionMailto()}
+              className="inline-flex items-center rounded-full bg-[#8b6842] px-6 py-3 text-base font-medium text-white transition hover:opacity-90"
+            >
+              Request a commission
+            </a>
+            <a
+              href={instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-full border border-[#1c1a17]/20 px-6 py-3 text-base font-medium transition hover:bg-black/[0.04]"
+            >
+              @{CONTACT.instagramHandle}
+            </a>
+            <a
+              href={emailUrl}
+              className="inline-flex items-center rounded-full border border-[#1c1a17]/20 px-6 py-3 text-base font-medium transition hover:bg-black/[0.04]"
+            >
+              {CONTACT.email}
+            </a>
           </div>
         </div>
       </section>
