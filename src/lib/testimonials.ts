@@ -14,14 +14,8 @@ export const TESTIMONIALS: Testimonial[] = [
   },
   {
     quote:
-      "Add your second review here. Perhaps share how the piece has transformed your space or the reactions it draws from guests.",
-    name: "Collector Name",
+      "Your artwork is always thoughtful, unique, and full of personality. Every piece reflects your passion and creativity, and it’s inspiring to see your talent continue to grow.",
+    name: "Sean Ng ",
     context: "Collected · Landscape · 2023",
-  },
-  {
-    quote:
-      "Add your third review here. You might speak to the artist's process, communication style, or the final result.",
-    name: "Collector Name",
-    context: "Commission · Portrait · 2025",
   },
 ];
