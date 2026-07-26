@@ -20,24 +20,24 @@ export default async function BrowsePage() {
       <header className="sticky top-0 z-10 border-b border-black/10 bg-[#f4f1ea]/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 sm:px-10">
           <span className="font-serif text-2xl tracking-wide">Yu Jun Jie</span>
-          <nav className="flex items-center gap-2">
+          <nav className="flex flex-wrap items-center justify-end gap-2">
             <Link
               href="/about"
-              className="rounded-full border border-black/15 px-4 py-2 text-base transition hover:bg-black/[0.04]"
+              className="whitespace-nowrap rounded-full border border-black/15 px-4 py-2 text-sm transition hover:bg-black/[0.04] sm:text-base"
             >
               About
             </Link>
             <Link
               href="/about#contact"
-              className="rounded-full border border-black/15 px-4 py-2 text-base transition hover:bg-black/[0.04]"
+              className="whitespace-nowrap rounded-full border border-black/15 px-4 py-2 text-sm transition hover:bg-black/[0.04] sm:text-base"
             >
               Commissions
             </Link>
             <Link
               href="/"
-              className="rounded-full bg-[#8b6842] px-4 py-2 text-base text-white transition hover:opacity-90"
+              className="whitespace-nowrap rounded-full bg-[#8b6842] px-4 py-2 text-sm text-white transition hover:opacity-90 sm:text-base"
             >
-              Enter the 3D gallery →
+              3D gallery →
             </Link>
           </nav>
         </div>

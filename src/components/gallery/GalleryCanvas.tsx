@@ -59,16 +59,18 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
         </h1>
       </div>
 
-      {/* Escape hatch to the simple grid view */}
+      {/* Escape hatch to the simple grid view — icon-only on phones */}
       <Link
         href="/browse"
-        className={`pointer-events-auto absolute left-5 top-5 z-20 rounded-full border px-4 py-2 text-sm backdrop-blur-sm transition ${
+        aria-label="Simple grid view"
+        className={`pointer-events-auto absolute left-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full border text-lg backdrop-blur-sm transition sm:w-auto sm:gap-2 sm:px-4 sm:text-sm ${
           light
             ? "border-black/10 bg-white/55 text-[#4a4034] hover:bg-white/75"
             : "border-white/20 bg-black/45 text-white/90 hover:bg-white/15"
         }`}
       >
-        ☰ Simple view
+        <span aria-hidden>☰</span>
+        <span className="hidden sm:inline">Simple view</span>
       </Link>
 
       {/* Daylight / golden hour / evening — follows local time, tap to cycle */}
