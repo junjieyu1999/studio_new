@@ -61,19 +61,19 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
 
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 pb-24 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
         <div>
-          <div className="aspect-[4/5] w-full overflow-hidden bg-[#e7e2d6]">
+          <div className="flex w-full items-center justify-center overflow-hidden rounded bg-[#e7e2d6]">
             {active ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={active.url}
                 alt={active.caption}
-                className="h-full w-full object-cover"
+                className="block h-auto max-h-[82vh] w-auto max-w-full object-contain"
               />
             ) : null}
           </div>
 
           {allImages.length > 1 && (
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex flex-wrap gap-3">
               {allImages.map((img, i) => (
                 <button
                   key={img.url + i}

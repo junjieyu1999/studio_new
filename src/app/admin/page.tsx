@@ -45,6 +45,8 @@ const SLOTS: Slot[] = [
   { key: 0, label: "Cover photo", hint: "Main image shown on the gallery wall" },
   { key: 1, label: "Detail shot 1", hint: "Close-up, texture, or process detail" },
   { key: 2, label: "Detail shot 2", hint: "Second detail or alternate angle" },
+  { key: 3, label: "Detail shot 3", hint: "A third detail or angle" },
+  { key: 4, label: "With the artist", hint: "You alongside the finished piece" },
 ];
 
 const inputCls =
@@ -486,8 +488,8 @@ export default function AdminPage() {
             {tab === "images" && selected && (
               <div className="px-6 py-6 pb-16">
                 <p className="mb-6 max-w-lg text-sm leading-relaxed text-[#1c1a17]/55">
-                  Upload up to 3 images. The <strong className="font-medium text-[#1c1a17]">Cover photo</strong> hangs on the
-                  gallery wall; all three appear on the artwork detail page.
+                  Upload up to 5 images. The <strong className="font-medium text-[#1c1a17]">Cover photo</strong> hangs on the
+                  gallery wall; all of them appear on the artwork detail page.
                 </p>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                   {SLOTS.map((slot) => (

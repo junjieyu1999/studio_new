@@ -8,7 +8,7 @@ const EXT: Record<string, string> = {
   "image/webp": "webp",
 };
 
-// POST /api/artworks/upload — multipart: file, artworkId, sortOrder (0..2)
+// POST /api/artworks/upload — multipart: file, artworkId, sortOrder (0..4)
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
