@@ -67,7 +67,7 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 pb-24 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
+      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 pb-24 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[1.2fr_1fr]">
         <div>
           <div className="flex w-full items-center justify-center overflow-hidden rounded bg-[#e7e2d6]">
             {active ? (
