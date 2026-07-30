@@ -50,13 +50,21 @@ export function ArtworkDetail({ artwork }: { artwork: ArtworkWithImages }) {
 
   return (
     <div className="min-h-dvh bg-[#f4f1ea] text-[#1c1a17]">
-      <header className="flex items-center justify-between px-6 py-5 sm:px-10">
-        <Link
-          href="/"
-          className="font-mono text-[0.68rem] tracking-[0.22em] text-[#1c1a17]/70 hover:text-[#1c1a17]"
-        >
-          ← BACK TO GALLERY
-        </Link>
+      <header className="wood-panel border-b border-black/30 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 sm:px-10">
+          <Link
+            href="/"
+            className="font-mono text-[0.68rem] tracking-[0.22em] text-[#f4ecd8]/85 transition hover:text-white"
+          >
+            ← BACK TO GALLERY
+          </Link>
+          <Link
+            href="/"
+            className="font-serif text-xl tracking-wide text-[#f4ecd8] transition hover:text-white"
+          >
+            Yu Jun Jie
+          </Link>
+        </div>
       </header>
 
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 pb-24 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
