@@ -16,6 +16,12 @@ export const TESTIMONIALS: Testimonial[] = [
     quote:
       "Your artwork is always thoughtful, unique, and full of personality. Every piece reflects your passion and creativity, and it’s inspiring to see your talent continue to grow.",
     name: "Sean Ng ",
-    context: "Collected · Landscape · 2023",
+    context: "Collection · Landscape · 2023",
+  },
+  {
+    quote:
+      " I’ve always been impressed by Junjie’s work. Every painting he creates is incredibly detailed, and you can tell how much time, effort, and care goes into each piece. What I love most is how personal and unique his artworks feel, each one is thoughtfully done and made special for the person receiving it. If you’re looking for a meaningful and unique piece, I’d definitely recommend checking his work out!!!",
+    name: "Chua Sue Lynn",
+    context: "Collection · Watercolour · 2026",
   },
 ];
