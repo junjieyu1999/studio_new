@@ -6,6 +6,7 @@ import { Text, useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Artwork } from "@/types/artwork";
+import { optimizedTexture } from "@/lib/img";
 
 const MAX_HEIGHT = 2.6;
 const MIN_WIDTH = 1.5;
@@ -138,7 +139,7 @@ function plaqueX(width: number) {
 }
 
 function ArtworkBody({ artwork, hovered }: { artwork: Artwork; hovered: boolean }) {
-  const texture = useTexture(artwork.image_url as string);
+  const texture = useTexture(optimizedTexture(artwork.image_url as string, 1200, 68));
   const { width, height } = useMemo(() => {
     const img = texture.image as { width: number; height: number };
     const aspect = img?.width && img?.height ? img.width / img.height : 0.8;

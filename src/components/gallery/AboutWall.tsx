@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import { WALL_COLOR } from "@/lib/gallery-theme";
+import { optimizedTexture } from "@/lib/img";
 
 const WALL_HEIGHT = 5;
 const IMG_MAX_H = 3.0;
@@ -17,7 +18,7 @@ const TEXT_X = 0.35;
 const TEXT_MAXW = 3.35;
 
 function ArtistPhoto() {
-  const texture = useTexture("/artist-photo.jpg");
+  const texture = useTexture(optimizedTexture("/artist-photo.jpg", 828, 68));
   const { w, h } = useMemo(() => {
     const img = texture.image as { width: number; height: number } | undefined;
     const aspect = img?.width && img?.height ? img.width / img.height : 0.78;
