@@ -1,12 +1,54 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
+import { useProgress } from "@react-three/drei";
 import Link from "next/link";
-import { Suspense, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Artwork } from "@/types/artwork";
 import { MODE_ORDER, timeOfDayStore, type TimeMode } from "@/lib/time-of-day";
 import { GalleryScene } from "./GalleryScene";
 import { GuidedNavControls } from "./GuidedNavControls";
+
+// Full-cover spinner shown while the scene's textures load. Reveals the room
+// once loading finishes, with safety timers so it can never get permanently
+// stuck (e.g. if there is nothing to load).
+function LoadingOverlay() {
+  const { active, progress } = useProgress();
+  const started = useRef(false);
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    if (active) started.current = true;
+    if (started.current && !active && progress >= 100) {
+      const t = setTimeout(() => setHidden(true), 400);
+      return () => clearTimeout(t);
+    }
+  }, [active, progress]);
+
+  useEffect(() => {
+    // Nothing began loading → nothing to wait for.
+    const idle = setTimeout(() => {
+      if (!started.current) setHidden(true);
+    }, 2500);
+    // Hard cap so the overlay always clears eventually.
+    const cap = setTimeout(() => setHidden(true), 20000);
+    return () => {
+      clearTimeout(idle);
+      clearTimeout(cap);
+    };
+  }, []);
+
+  if (hidden) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-[#0d0b09]">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-[#e8c874]" />
+      <p className="font-serif text-lg text-white/80">
+        Entering the gallery… {Math.min(100, Math.round(progress))}%
+      </p>
+    </div>
+  );
+}
 
 function useAutoMode(): TimeMode {
   return useSyncExternalStore(
@@ -126,6 +168,8 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
       )}
 
       <GuidedNavControls mode={mode} />
+
+      <LoadingOverlay />
     </div>
   );
 }
