@@ -4,7 +4,15 @@ import { NextRequest, NextResponse } from "next/server";
 // The public gallery never hits these paths, so visitors are unaffected.
 // (Next.js 16 renamed the "middleware" convention to "proxy".)
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/api/artworks", "/api/artworks/:path*"],
+  matcher: [
+    "/admin",
+    "/admin/:path*",
+    "/api/artworks",
+    "/api/artworks/:path*",
+    // Snail-mail admin API (subscribers' addresses). Each handler also checks
+    // the credentials itself — see src/lib/admin-auth.ts.
+    "/api/admin/:path*",
+  ],
 };
 
 export function proxy(req: NextRequest) {

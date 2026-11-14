@@ -115,6 +115,27 @@ export function GalleryCanvas({ artworks }: { artworks: Artwork[] }) {
         <span className="hidden sm:inline">Simple view</span>
       </Link>
 
+      {/* Monthly snail-mail postcards. Desktop: bottom-left corner, clear of the
+          tour controls (centre) and the contact widget (bottom-right). Phones:
+          lifted just above the tour controls so the label has room. */}
+      <Link
+        href="/postcards"
+        aria-label="Monthly postcards by post — find out more and join"
+        className={`pointer-events-auto absolute bottom-[6.5rem] left-5 z-20 flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm backdrop-blur-sm transition sm:bottom-6 ${
+          light
+            ? "border-[#8b6842]/45 bg-white/65 text-[#6f4f2c] hover:bg-white/85"
+            : "border-[#e8c874]/45 bg-black/50 text-[#e8c874] hover:bg-[#e8c874]/15"
+        }`}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5 shrink-0" aria-hidden>
+          <rect x="3" y="5" width="18" height="14" rx="1.5" />
+          <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+        </svg>
+        <span>
+          Monthly postcards <span aria-hidden>→</span>
+        </span>
+      </Link>
+
       {/* Daylight / golden hour / evening — follows local time, tap to cycle */}
       <button
         onClick={cycleMode}
