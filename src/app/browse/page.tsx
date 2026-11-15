@@ -28,6 +28,12 @@ export default async function BrowsePage() {
               About
             </Link>
             <Link
+              href="/postcards"
+              className="whitespace-nowrap rounded-full border border-black/15 px-4 py-2 text-sm transition hover:bg-black/[0.04] sm:text-base"
+            >
+              Postcards
+            </Link>
+            <Link
               href="/about#contact"
               className="whitespace-nowrap rounded-full border border-black/15 px-4 py-2 text-sm transition hover:bg-black/[0.04] sm:text-base"
             >
