@@ -1,5 +1,22 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Snail mail postcards
+
+A monthly postcard service: a public page for sign-ups, and an admin to run it.
+
+- **`/postcards`** (public): what subscribers get, the route so far, and "Add your address" buttons that open the sign-up Google Form. The form URL is `POSTCARD_FORM_URL` in `src/lib/mail.ts`. A "Monthly postcards" button on the 3D gallery and a "Postcards" link on `/browse` lead here.
+- **`/admin`** (password protected, same login as before): now has three tabs. **Overview** shows the artwork and postcard pipelines side by side with things that need attention, **Artworks** is the existing artwork manager, and **Snail mail** manages subscribers, monthly issues, shipments, costs and profit.
+
+### One-time setup
+1. In the Supabase **SQL Editor**, run `supabase/migration_snail_mail.sql` (safe to re-run). It creates `mail_subscribers`, `mail_issues` and `mail_shipments`. They hold home addresses, so Row Level Security is on with no public access: only the server (service role key) can read them.
+2. No new environment variables. It uses the existing `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_PASSWORD` (and optional `ADMIN_USER`). If `ADMIN_PASSWORD` is unset in production, all admin pages and APIs refuse every request.
+
+### Running it
+- **Subscribers**: when someone fills in the Google Form, add them under *Snail mail → Subscribers*. Only *Active* subscribers get a postcard.
+- **Monthly issues**: create one per month (city, linked artwork, what goes on the card, cost per postcard). Tick *Show on the public Postcards page* to publish the month, city and artwork on `/postcards`. Highlights, story and costs are never shown publicly.
+- **Shipments**: open an issue and click *Generate shipments*. Each active subscriber gets a row with price and costs copied in (Singapore addresses use local postage, anywhere else overseas postage). Mark them printed or mailed one by one or all at once, and use *Copy addresses to mail* for labels.
+- **Money**: revenue counts for mailed or delivered postcards, costs for mailed, delivered or returned ones. Dates use Singapore time.
+
 ## Getting Started
 
 First, run the development server:
