@@ -40,7 +40,8 @@ export interface MailIssue {
   city: string;
   country: string | null;
   title: string | null;
-  artwork_id: string | null;
+  image_url: string | null;   // postcard design (its own collection, not an artwork)
+  image_path: string | null;  // storage path, so the file can be replaced or removed
   highlights: string | null;
   story: string | null;
   status: IssueStatus;
@@ -82,11 +83,7 @@ export interface PublicIssue {
   city: string;
   country: string | null;
   title: string | null;
-  artwork: {
-    title: string;
-    image_url: string | null;
-    gradient_bg: string | null;
-  } | null;
+  image_url: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

@@ -429,6 +429,61 @@
   margin-bottom: 0.8rem;
 }
 .miniImg { object-fit: cover; }
+.miniBtn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  font: inherit;
+  color: inherit;
+}
+.miniBtn .miniCard { display: block; transition: transform var(--transition), border-color var(--transition); }
+.miniBtn:hover .miniCard, .miniBtn:focus-visible .miniCard { transform: translateY(-2px); border-color: rgba(196, 163, 90, 0.7); }
+.miniBtn:focus-visible { outline: 2px solid rgba(212, 184, 106, 0.9); outline-offset: 3px; border-radius: 3px; }
+
+/* Enlarged design */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(10, 8, 6, 0.88);
+}
+.lightboxInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  width: min(92vw, 980px);
+}
+.lightboxImgWrap {
+  position: relative;
+  width: 100%;
+  height: min(72dvh, 680px);
+}
+.lightboxImg { object-fit: contain; }
+.lightboxCap {
+  color: rgba(244, 241, 234, 0.85);
+  font-family: var(--ff-serif), Georgia, serif;
+  font-size: 1.05rem;
+  text-align: center;
+}
+.lightboxClose {
+  padding: 0.55rem 1.4rem;
+  border: 1px solid rgba(244, 241, 234, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(244, 241, 234, 0.9);
+  font-family: var(--ff-serif), Georgia, serif;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.lightboxClose:hover { background: rgba(244, 241, 234, 0.1); }
 .miniGhost {
   display: flex;
   align-items: center;

@@ -2,7 +2,7 @@
 // DELETE /api/admin/mail/issues/[id] — delete (blocked if shipments exist)
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
-import { getAdminClient } from '@/lib/supabase-admin';
+import { getAdminClient, STORAGE_BUCKET } from '@/lib/supabase-admin';
 import { parseBody, ISSUE_SCHEMA, isUuid, friendlyDbError } from '@/lib/mail-validation';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,9 +29,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (error.code === '23505') {
         return NextResponse.json({ error: 'There is already an issue for that month.' }, { status: 409 });
       }
-      if (error.code === '23503') {
-        return NextResponse.json({ error: 'The linked artwork does not exist.' }, { status: 400 });
-      }
       const f = friendlyDbError(error);
       return NextResponse.json({ error: f.message }, { status: f.status });
     }
@@ -50,7 +47,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!isUuid(id)) return NextResponse.json({ error: 'Invalid id.' }, { status: 400 });
 
   try {
-    const { data, error } = await getAdminClient()
+    const admin = getAdminClient();
+    const { data: existing } = await admin.from('mail_issues').select('image_path').eq('id', id).maybeSingle();
+    const { data, error } = await admin
       .from('mail_issues')
       .delete()
       .eq('id', id)
@@ -67,6 +66,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return NextResponse.json({ error: f.message }, { status: f.status });
     }
     if (!data || data.length === 0) return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
+    // The issue is gone, so remove its design file too (best effort).
+    if (existing?.image_path) {
+      await admin.storage.from(STORAGE_BUCKET).remove([existing.image_path]).catch(() => {});
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE issue error:', err);

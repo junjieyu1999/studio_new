@@ -124,7 +124,6 @@ export default function AdminShell() {
       {tab === "mail" && (
         <AdminMail
           data={mail}
-          artworks={artworks}
           loading={!mail && !mailError}
           error={mailError}
           onChanged={reload}

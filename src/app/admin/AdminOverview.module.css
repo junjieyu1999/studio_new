@@ -210,3 +210,6 @@
   .page { padding: 1.25rem 1rem 3rem; }
   .studioRow { flex-direction: column; gap: 0.15rem; }
 }
+
+.designCell { display: inline-flex; align-items: center; gap: 0.6rem; }
+.thumb { width: 48px; height: 32px; object-fit: cover; border-radius: 2px; border: 1px solid var(--abo); }
