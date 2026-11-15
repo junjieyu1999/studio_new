@@ -4,6 +4,7 @@
 // so it is obvious when a monthly postcard depends on a painting that is not finished.
 
 import { useMemo } from 'react';
+import Image from 'next/image';
 import type { Artwork } from '@/types/artwork';
 import {
   type MailData, type MailIssue,
@@ -20,12 +21,6 @@ interface Props {
   onOpenArtworks: () => void;
 }
 
-const ARTWORK_STATUS_LABEL: Record<string, string> = {
-  'available': 'Available',
-  'in-progress': 'In progress',
-  'sold': 'Sold',
-};
-
 type Alert = { text: string; level: 'warn' | 'info'; go: 'mail' | 'artworks' };
 
 export default function AdminOverview({ artworks, mail, error, loading, onOpenMail, onOpenArtworks }: Props) {
@@ -33,7 +28,6 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
     if (!mail) return null;
 
     const thisMonth = todaySG().slice(0, 7);          // 'YYYY-MM'
-    const byId = new Map(artworks.map((a) => [a.id, a]));
     const activeSubs = mail.subscribers.filter((s) => s.status === 'active').length;
 
     // shipments grouped per issue
@@ -76,18 +70,13 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
           alerts.push({ level: 'warn', go: 'mail', text: `${label}: ${counts.toMail} postcard${counts.toMail === 1 ? '' : 's'} still to mail.` });
         }
       }
-      if (month >= thisMonth && i.status !== 'shipped') {
-        const art = i.artwork_id ? byId.get(i.artwork_id) : null;
-        if (!i.artwork_id) {
-          alerts.push({ level: 'info', go: 'mail', text: `${label}: no artwork linked yet.` });
-        } else if (art && art.status === 'in-progress') {
-          alerts.push({ level: 'warn', go: 'artworks', text: `${label}: the linked artwork “${art.title}” is still in progress.` });
-        }
+      if (month >= thisMonth && i.status !== 'shipped' && !i.image_url) {
+        alerts.push({ level: 'info', go: 'mail', text: `${label}: no postcard design uploaded yet.` });
       }
     }
 
-    return { thisMonth, byId, activeSubs, perIssue, revenue, cost, current, upcoming, alerts };
-  }, [mail, artworks]);
+    return { thisMonth, activeSubs, perIssue, revenue, cost, current, upcoming, alerts };
+  }, [mail]);
 
   const artCounts = {
     total: artworks.length,
@@ -175,35 +164,32 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
           )}
         </section>
 
-        {/* ── Upcoming postcards and the artwork behind each ── */}
+        {/* ── Upcoming postcards and their designs ── */}
         <section className={styles.panel}>
-          <h2 className={styles.panelTitle}>Postcards and the artwork behind them</h2>
+          <h2 className={styles.panelTitle}>Postcards, month by month</h2>
           {!view || view.upcoming.length === 0 ? (
             <p className={styles.muted}>No current or upcoming issues. Create one in Snail mail.</p>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
-                  <tr><th>Month</th><th>City</th><th>Artwork</th><th>Postcard</th><th>Mailed</th></tr>
+                  <tr><th>Month</th><th>City</th><th>Design</th><th>Postcard</th><th>Mailed</th></tr>
                 </thead>
                 <tbody>
                   {view.upcoming.map((i: MailIssue) => {
-                    const art = i.artwork_id ? view.byId.get(i.artwork_id) : undefined;
                     const c = view.perIssue.get(i.id);
                     return (
                       <tr key={i.id}>
                         <td>{formatMonth(i.issue_month, 'short')}</td>
                         <td>{i.city}</td>
                         <td>
-                          {art ? (
-                            <>
-                              {art.title}{' '}
-                              <span className={`${styles.badge} ${art.status === 'in-progress' ? styles.badgeWarn : ''}`}>
-                                {ARTWORK_STATUS_LABEL[art.status] ?? art.status}
-                              </span>
-                            </>
+                          {i.image_url ? (
+                            <span className={styles.designCell}>
+                              <Image src={i.image_url} alt={`${i.city} postcard design`} width={48} height={32} className={styles.thumb} />
+                              {i.title || 'Uploaded'}
+                            </span>
                           ) : (
-                            <span className={styles.muted}>Not linked</span>
+                            <span className={styles.muted}>No design yet</span>
                           )}
                         </td>
                         <td><span className={styles.badge}>{i.status}</span></td>
@@ -218,26 +204,19 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
         </section>
       </div>
 
-      {/* ── Artworks still being painted ── */}
+      {/* ── Oil paintings still being painted (kept separate from the postcard designs) ── */}
       <section className={styles.panel}>
-        <h2 className={styles.panelTitle}>In the studio</h2>
+        <h2 className={styles.panelTitle}>Oil paintings in progress</h2>
         {artworks.filter((a) => a.status === 'in-progress').length === 0 ? (
-          <p className={styles.muted}>No artworks are marked as in progress.</p>
+          <p className={styles.muted}>No paintings are marked as in progress.</p>
         ) : (
           <ul className={styles.studioList}>
-            {artworks.filter((a) => a.status === 'in-progress').map((a) => {
-              const linked = mail?.issues.find((i) => i.artwork_id === a.id);
-              return (
-                <li key={a.id} className={styles.studioRow}>
-                  <span>{a.title}</span>
-                  <span className={styles.muted}>
-                    {linked
-                      ? `Postcard for ${linked.city}, ${formatMonth(linked.issue_month, 'short')}`
-                      : 'Not linked to a postcard'}
-                  </span>
-                </li>
-              );
-            })}
+            {artworks.filter((a) => a.status === 'in-progress').map((a) => (
+              <li key={a.id} className={styles.studioRow}>
+                <span>{a.title}</span>
+                <span className={styles.muted}>{a.year} · {a.medium}</span>
+              </li>
+            ))}
           </ul>
         )}
       </section>

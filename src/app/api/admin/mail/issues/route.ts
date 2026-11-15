@@ -22,9 +22,6 @@ export async function POST(req: NextRequest) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'There is already an issue for that month.' }, { status: 409 });
       }
-      if (error.code === '23503') {
-        return NextResponse.json({ error: 'The linked artwork does not exist.' }, { status: 400 });
-      }
       const f = friendlyDbError(error);
       return NextResponse.json({ error: f.message }, { status: f.status });
     }

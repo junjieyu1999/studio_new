@@ -41,7 +41,8 @@ create table if not exists public.mail_issues (
   city            text          not null,
   country         text,
   title           text,                           -- optional name for the design
-  artwork_id      text          references public.artworks (id) on delete set null,
+  image_url       text,                           -- the postcard design (public URL). Kept apart from your oil artworks
+  image_path      text,                           -- where that file lives in storage (so it can be replaced or removed)
   highlights      text,                           -- travel highlights printed on the card (private)
   story           text,                           -- personal story printed on the card (private)
   status          text          not null default 'planning'
@@ -54,6 +55,13 @@ create table if not exists public.mail_issues (
   notes           text,
   created_at      timestamptz   not null default now()
 );
+
+-- Postcard designs are their own collection: the image belongs to the issue itself,
+-- NOT to the artworks table, so your oil paintings and your postcards never mix.
+-- If you ran an earlier version of this file, the two lines below add the new
+-- columns; its old "artwork_id" column (if present) is no longer used and is ignored.
+alter table public.mail_issues add column if not exists image_url  text;
+alter table public.mail_issues add column if not exists image_path text;
 
 -- ── SHIPMENTS: one row per postcard sent to one subscriber ───────
 -- Costs/price are copied onto each row when it is created, so changing an

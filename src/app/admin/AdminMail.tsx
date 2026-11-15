@@ -4,8 +4,8 @@
 // All data comes from /api/admin/mail/* (admin login required). After every change the
 // parent reloads the data, so what you see is always what is stored.
 
-import { useMemo, useState } from 'react';
-import type { Artwork } from '@/types/artwork';
+import { useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import {
   type MailData, type MailIssue, type MailShipment, type MailSubscriber,
   type IssueStatus, type ShipmentStatus, type SubscriberStatus,
@@ -17,7 +17,6 @@ import styles from './AdminMail.module.css';
 
 interface Props {
   data: MailData | null;
-  artworks: Artwork[];
   loading: boolean;
   error: string;
   onChanged: () => Promise<void> | void;
@@ -37,7 +36,6 @@ type IssueForm = {
   city: string;
   country: string;
   title: string;
-  artwork_id: string;
   status: IssueStatus;
   is_published: boolean;
   print_cost: string;
@@ -55,7 +53,6 @@ function issueToForm(i: MailIssue): IssueForm {
     city: i.city,
     country: i.country ?? '',
     title: i.title ?? '',
-    artwork_id: i.artwork_id ?? '',
     status: i.status,
     is_published: i.is_published,
     print_cost: String(i.print_cost),
@@ -82,7 +79,7 @@ function blankIssue(issues: MailIssue[]): IssueForm {
     : thisMonth;
   return {
     issue_month: month,
-    city: '', country: '', title: '', artwork_id: '',
+    city: '', country: '', title: '',
     status: 'planning', is_published: false,
     print_cost: costed ? String(costed.print_cost) : '0',
     postage_local: costed ? String(costed.postage_local) : '0',
@@ -123,7 +120,7 @@ function subToForm(s: MailSubscriber): SubForm {
 }
 
 // ─────────────────────────────────────────────────────────────────
-export default function AdminMail({ data, artworks, loading, error, onChanged }: Props) {
+export default function AdminMail({ data, loading, error, onChanged }: Props) {
   const [view, setView] = useState<View>('issues');
   const [notice, setNotice] = useState<Notice>(null);
 
@@ -162,7 +159,7 @@ export default function AdminMail({ data, artworks, loading, error, onChanged }:
       )}
 
       {view === 'issues'
-        ? <IssuesView data={data} artworks={artworks} say={say} onChanged={onChanged} />
+        ? <IssuesView data={data} say={say} onChanged={onChanged} />
         : <SubscribersView data={data} say={say} onChanged={onChanged} />}
     </div>
   );
@@ -177,17 +174,18 @@ interface ViewProps {
   onChanged: () => Promise<void> | void;
 }
 
-function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: Artwork[] }) {
+function IssuesView({ data, say, onChanged }: ViewProps) {
   const [selectedId, setSelectedId] = useState<string | 'new' | null>(null);
   const [form, setForm] = useState<IssueForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState('');          // id of the shipment/action being processed
+  const [imgBusy, setImgBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const issues = useMemo(
     () => [...data.issues].sort((a, b) => b.issue_month.localeCompare(a.issue_month)),
     [data.issues]
   );
-  const artworkById = useMemo(() => new Map(artworks.map((a) => [a.id, a])), [artworks]);
   const subById = useMemo(() => new Map(data.subscribers.map((s) => [s.id, s])), [data.subscribers]);
 
   const selected = selectedId && selectedId !== 'new' ? data.issues.find((i) => i.id === selectedId) ?? null : null;
@@ -215,7 +213,6 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
         city: form.city,
         country: form.country,
         title: form.title,
-        artwork_id: form.artwork_id === '' ? null : form.artwork_id,
         status: form.status,
         is_published: form.is_published,
         print_cost: num(form.print_cost),
@@ -241,6 +238,49 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
       say('err', e instanceof Error ? e.message : 'Save failed.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Postcard design image (its own collection; never touches the artworks) ──
+  const uploadDesign = async (file: File | undefined) => {
+    if (!selected || !file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      say('err', 'Please choose a JPG, PNG or WebP image.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      say('err', 'That image is over 4 MB. Please export a smaller one.');
+      return;
+    }
+    setImgBusy(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await fetch(`/api/admin/mail/issues/${selected.id}/image`, { method: 'POST', body, cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : 'Upload failed.');
+      await onChanged();
+      say('ok', 'Design saved.');
+    } catch (e) {
+      say('err', e instanceof Error ? e.message : 'Upload failed.');
+    } finally {
+      setImgBusy(false);
+      if (fileRef.current) fileRef.current.value = '';   // allow choosing the same file again
+    }
+  };
+
+  const removeDesign = async () => {
+    if (!selected) return;
+    if (!window.confirm('Remove this postcard design? You can upload another one afterwards.')) return;
+    setImgBusy(true);
+    try {
+      await adminApi('DELETE', `/api/admin/mail/issues/${selected.id}/image`);
+      await onChanged();
+      say('ok', 'Design removed.');
+    } catch (e) {
+      say('err', e instanceof Error ? e.message : 'Could not remove the design.');
+    } finally {
+      setImgBusy(false);
     }
   };
 
@@ -357,7 +397,6 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
     { revenue: 0, cost: 0 }
   );
   const statusCount = (st: ShipmentStatus) => shipments.filter((s) => s.status === st).length;
-  const linkedArtwork = form?.artwork_id ? artworkById.get(form.artwork_id) : undefined;
 
   return (
     <div className={styles.split}>
@@ -374,6 +413,9 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
             <button key={i.id}
               className={`${styles.row} ${selectedId === i.id ? styles.rowOn : ''}`}
               onClick={() => pick(i)}>
+              {i.image_url && (
+                <Image src={i.image_url} alt="" width={44} height={30} className={styles.rowThumb} />
+              )}
               <span className={styles.rowMain}>
                 <span className={styles.rowTitle}>{formatMonth(i.issue_month, 'short')} · {i.city}</span>
                 <span className={styles.rowMeta}>
@@ -423,21 +465,6 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
                 <label className={styles.field}>Design title
                   <input type="text" value={form.title} onChange={(e) => set('title', e.target.value)} />
                 </label>
-                <label className={styles.field}>Artwork of the month
-                  <select value={form.artwork_id} onChange={(e) => set('artwork_id', e.target.value)}>
-                    <option value="">— Not linked —</option>
-                    {artworks.map((a) => (
-                      <option key={a.id} value={a.id}>{a.title} ({a.status})</option>
-                    ))}
-                  </select>
-                  {linkedArtwork && (
-                    <span className={`${styles.hint} ${linkedArtwork.status === 'in-progress' ? styles.hintWarn : ''}`}>
-                      {linkedArtwork.status === 'in-progress'
-                        ? 'This artwork is still in progress.'
-                        : `Artwork is ${linkedArtwork.status}.`}
-                    </span>
-                  )}
-                </label>
                 <label className={styles.field}>Postcard status
                   <select value={form.status} onChange={(e) => set('status', e.target.value as IssueStatus)}>
                     {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
@@ -446,8 +473,48 @@ function IssuesView({ data, artworks, say, onChanged }: ViewProps & { artworks: 
               </div>
               <label className={styles.check}>
                 <input type="checkbox" checked={form.is_published} onChange={(e) => set('is_published', e.target.checked)} />
-                <span>Show this issue on the public Postcards page <em>(city, month and artwork only)</em></span>
+                <span>Show this issue on the public Postcards page <em>(month, city and design image only)</em></span>
               </label>
+            </div>
+
+            <div className={styles.section}>
+              <div className={styles.sectionLabel}>Postcard design</div>
+              {!selected ? (
+                <p className={styles.hint}>Save the issue first, then you can upload its design here.</p>
+              ) : (
+                <div className={styles.designBox}>
+                  <div className={styles.designPreview}>
+                    {selected.image_url ? (
+                      <Image src={selected.image_url} alt={`${selected.city} postcard design`} fill sizes="260px" className={styles.designImg} />
+                    ) : (
+                      <span className={styles.designEmpty}>No design yet</span>
+                    )}
+                  </div>
+                  <div className={styles.designSide}>
+                    <div className={styles.designActions}>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className={styles.fileHidden}
+                        onChange={(e) => uploadDesign(e.target.files?.[0])}
+                        disabled={imgBusy}
+                        aria-label="Choose a postcard design image"
+                      />
+                      <button type="button" className={styles.btnPrimarySm} onClick={() => fileRef.current?.click()} disabled={imgBusy}>
+                        {imgBusy ? 'Working…' : selected.image_url ? 'Replace design' : 'Upload design'}
+                      </button>
+                      {selected.image_url && (
+                        <button type="button" className={styles.btn} onClick={removeDesign} disabled={imgBusy}>Remove</button>
+                      )}
+                    </div>
+                    <span className={styles.hint}>
+                      JPG, PNG or WebP, up to 4 MB. This is the front of the postcard. It is kept apart from your
+                      oil paintings and only appears on the Postcards page, once the issue is shown publicly.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className={styles.section}>
