@@ -286,7 +286,7 @@
   padding: 0.5rem 0.9rem;
 }
 .btnDanger:hover { background: rgba(192, 57, 43, 0.06); }
-.btn:disabled, .btnPrimary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled, .btnPrimary:disabled, .btnPrimarySm:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Shipments ── */
 .statsRow {
@@ -363,3 +363,31 @@
   .headActions > * { flex: 1; }
   .statsMoney { margin-left: 0; width: 100%; }
 }
+
+/* ── Postcard design (its own image, separate from the oil paintings) ── */
+.designBox { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.designPreview {
+  position: relative;
+  width: 200px;
+  aspect-ratio: 3 / 2;
+  border: 1px dashed var(--abo);
+  border-radius: var(--radius);
+  background: var(--as);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.designImg { object-fit: cover; }
+.designEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 300;
+  color: var(--am);
+}
+.designSide { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; min-width: 200px; }
+.designActions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.fileHidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.rowThumb { width: 44px; height: 30px; object-fit: cover; border-radius: 2px; margin-right: 0.6rem; flex-shrink: 0; align-self: center; }

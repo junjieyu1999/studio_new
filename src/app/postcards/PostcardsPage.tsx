@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { createPortal } from 'react-dom';
 import styles from './PostcardsPage.module.css';
 import { emailUrl } from '@/lib/contact';
 import { POSTCARD_FORM_URL, addMonths, formatMonth, type PublicIssue } from '@/lib/mail';
@@ -18,11 +19,11 @@ interface Props {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// A postcard you can turn over. Front = the artwork, back = the writing.
+// A postcard you can turn over. Front = the design, back = the writing.
 // ─────────────────────────────────────────────────────────────────
 function PostcardVisual({ issue }: { issue: PublicIssue | null }) {
   const [flipped, setFlipped] = useState(false);
-  const art = issue?.artwork ?? null;
+  const imageUrl = issue?.image_url ?? null;
 
   const caption = issue
     ? `${formatMonth(issue.issue_month)} · ${issue.city}`
@@ -33,17 +34,17 @@ function PostcardVisual({ issue }: { issue: PublicIssue | null }) {
       <div
         className={styles.stage}
         role="img"
-        aria-label="A postcard. The front shows an original print of the artwork of the month. The back holds trip highlights and a personal story."
+        aria-label="A postcard. The front shows the postcard design for the month. The back holds trip highlights and a personal story."
       >
         <div className={`${styles.ghostCard} ${styles.ghostA}`} aria-hidden="true" />
         <div className={`${styles.ghostCard} ${styles.ghostB}`} aria-hidden="true" />
 
         <div className={`${styles.flipper} ${flipped ? styles.flipped : ''}`} aria-hidden="true">
           {/* Front */}
-          <div className={`${styles.face} ${styles.front}`} style={{ background: art?.gradient_bg ?? DEFAULT_GRADIENT }}>
-            {art?.image_url && (
+          <div className={`${styles.face} ${styles.front}`} style={{ background: DEFAULT_GRADIENT }}>
+            {imageUrl && (
               <Image
-                src={art.image_url}
+                src={imageUrl}
                 alt=""
                 fill
                 sizes="(max-width: 960px) 90vw, 460px"
@@ -53,7 +54,7 @@ function PostcardVisual({ issue }: { issue: PublicIssue | null }) {
             )}
             <div className={styles.sheen} />
             <div className={styles.frontCap}>
-              <span className={styles.frontCapLabel}>Artwork of the month</span>
+              <span className={styles.frontCapLabel}>Postcard design</span>
               <span className={styles.frontCapText}>{caption}</span>
             </div>
           </div>
@@ -94,6 +95,7 @@ function PostcardVisual({ issue }: { issue: PublicIssue | null }) {
 // The route: published issues so far, then "next stops" still to come.
 // ─────────────────────────────────────────────────────────────────
 function Route({ issues }: { issues: PublicIssue[] }) {
+  const [open, setOpen] = useState<PublicIssue | null>(null);
   const ghosts = Math.max(1, 4 - issues.length);
   const last = issues.length > 0 ? issues[issues.length - 1] : null;
 
@@ -102,30 +104,73 @@ function Route({ issues }: { issues: PublicIssue[] }) {
       ? formatMonth(`${addMonths(last.issue_month, k + 1)}-01`)
       : `Month 0${k + 1}`;
 
-  return (
-    <ol className={styles.route}>
-      {issues.map((i) => (
-        <li key={i.id} className={styles.stop}>
-          <div className={styles.miniCard} style={{ background: i.artwork?.gradient_bg ?? DEFAULT_GRADIENT }}>
-            {i.artwork?.image_url && (
-              <Image src={i.artwork.image_url} alt={i.artwork.title} fill sizes="220px" className={styles.miniImg} />
-            )}
-          </div>
-          <div className={styles.stopMonth}>{formatMonth(i.issue_month)}</div>
-          <div className={styles.stopCity}>{i.city}</div>
-          {i.country && <div className={styles.stopNote}>{i.country}</div>}
-        </li>
-      ))}
+  // Escape closes the enlarged design.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
-      {Array.from({ length: ghosts }).map((_, k) => (
-        <li key={`next-${k}`} className={`${styles.stop} ${styles.stopNext}`}>
-          <div className={`${styles.miniCard} ${styles.miniGhost}`} aria-hidden="true"><span>?</span></div>
-          <div className={styles.stopMonth}>{ghostLabel(k)}</div>
-          <div className={styles.stopCity}>{k === 0 ? 'Next stop' : 'Still to come'}</div>
-          <div className={styles.stopNote}>Revealed in the post</div>
-        </li>
-      ))}
-    </ol>
+  return (
+    <>
+      <ol className={styles.route}>
+        {issues.map((i) => (
+          <li key={i.id} className={styles.stop}>
+            {i.image_url ? (
+              <button
+                type="button"
+                className={styles.miniBtn}
+                onClick={() => setOpen(i)}
+                aria-label={`View the ${i.city} postcard design larger`}
+              >
+                <span className={styles.miniCard} style={{ background: DEFAULT_GRADIENT }}>
+                  <Image src={i.image_url} alt="" fill sizes="220px" className={styles.miniImg} />
+                </span>
+              </button>
+            ) : (
+              <div className={styles.miniCard} style={{ background: DEFAULT_GRADIENT }} />
+            )}
+            <div className={styles.stopMonth}>{formatMonth(i.issue_month)}</div>
+            <div className={styles.stopCity}>{i.city}</div>
+            {i.country && <div className={styles.stopNote}>{i.country}</div>}
+          </li>
+        ))}
+
+        {Array.from({ length: ghosts }).map((_, k) => (
+          <li key={`next-${k}`} className={`${styles.stop} ${styles.stopNext}`}>
+            <div className={`${styles.miniCard} ${styles.miniGhost}`} aria-hidden="true"><span>?</span></div>
+            <div className={styles.stopMonth}>{ghostLabel(k)}</div>
+            <div className={styles.stopCity}>{k === 0 ? 'Next stop' : 'Still to come'}</div>
+            <div className={styles.stopNote}>Revealed in the post</div>
+          </li>
+        ))}
+      </ol>
+
+      {open && open.image_url && createPortal(
+        <div
+          className={styles.lightbox}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${open.city} postcard design`}
+          onClick={() => setOpen(null)}
+        >
+          <div className={styles.lightboxInner} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.lightboxImgWrap}>
+              <Image src={open.image_url} alt={`Postcard design for ${open.city}`} fill sizes="90vw" className={styles.lightboxImg} />
+            </div>
+            <div className={styles.lightboxCap}>
+              {formatMonth(open.issue_month)} · {open.city}{open.country ? `, ${open.country}` : ''}
+              {open.title ? <span> — {open.title}</span> : null}
+            </div>
+            <button type="button" className={styles.lightboxClose} onClick={() => setOpen(null)} autoFocus>
+              Close
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -140,7 +185,8 @@ function JoinLink({ className, children }: { className: string; children: React.
 
 // ─────────────────────────────────────────────────────────────────
 export default function PostcardsPage({ issues }: Props) {
-  const latest = issues.length > 0 ? issues[issues.length - 1] : null;
+  // The postcard on show: the newest published issue that has a design uploaded.
+  const latest = [...issues].reverse().find((i) => i.image_url) ?? (issues.length > 0 ? issues[issues.length - 1] : null);
 
   return (
     <div className="min-h-dvh bg-[#f4f1ea] text-[#1c1a17]">

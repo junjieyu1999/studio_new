@@ -144,7 +144,6 @@ export const ISSUE_SCHEMA: Schema = {
   city:           { kind: 'text', max: 120 },
   country:        { kind: 'text', max: 120, nullable: true },
   title:          { kind: 'text', max: 160, nullable: true },
-  artwork_id:     { kind: 'text', max: 200, nullable: true, format: 'slug' },
   highlights:     { kind: 'text', max: 5000, nullable: true },
   story:          { kind: 'text', max: 10000, nullable: true },
   status:         { kind: 'enum', values: ISSUE_STATUSES },
