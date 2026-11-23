@@ -2,7 +2,7 @@
 
 // Snail mail → Payments. The money side of the subscription CRM:
 //   • totals (received this month / in total / by method)
-//   • your price for each plan (1, 3, 6 and 12 months)
+//   • your price for each plan (3, 6 and 12 months)
 //   • who needs to pay or renew
 //   • every payment, newest first
 // All figures are computed from the payments you record, in Singapore dollars.
@@ -176,7 +176,7 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
             <div key={m} className={styles.planRow}>
               <span className={styles.planName}>{planLabel(m)}</span>
               <label className={styles.field}>
-                <span className={styles.planPer}>Price (S$){per !== null && m > 1 ? ` · ${money(per)} a month` : ''}</span>
+                <span className={styles.planPer}>Price (S$){per !== null ? ` · ${money(per)} a month` : ''}</span>
                 <input type="number" min="0" step="0.01" value={d.price} placeholder="Not set"
                   onChange={(e) => setEdits((x) => ({ ...x, [m]: { ...x[m], price: e.target.value } }))}
                   aria-label={`${planLabel(m)} plan price`} />

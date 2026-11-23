@@ -19,7 +19,7 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   other: 'Other',
 };
 
-export const planLabel = (months: number): string => (months === 1 ? '1 month' : `${months} months`);
+export const planLabel = (months: number): string => `${months} months`;
 
 /** Current month in Singapore as 'YYYY-MM'. */
 export const currentMonthSG = (): string => todaySG().slice(0, 7);

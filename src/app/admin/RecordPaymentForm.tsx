@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  type MailPayment, type MailPlan, type MailSubscriber, type PaymentMethod,
+  type MailPayment, type MailPlan, type MailSubscriber, type PaymentMethod, type PlanMonths,
   PAYMENT_METHODS, PLAN_MONTHS, formatMonth, money, todaySG,
 } from '@/lib/mail';
 import {
@@ -44,7 +44,7 @@ const planPrice = (plans: MailPlan[], months: number): number | null =>
 function initialFor(
   sub: MailSubscriber | undefined, payments: MailPayment[], plans: MailPlan[],
 ): FormState {
-  const months = sub?.plan_months ?? 1;
+  const months = sub?.plan_months ?? PLAN_MONTHS[0];
   const mine = sub ? payments.filter((p) => p.subscriber_id === sub.id) : [];
   const price = planPrice(plans, months);
   return {
@@ -91,7 +91,7 @@ export default function RecordPaymentForm({
   const foreign = f.currency !== 'SGD';
   const months = Number(f.plan);
   const covers = /^\d{4}-\d{2}$/.test(f.start)
-    ? `${formatMonth(`${f.start}-01`, 'short')} – ${formatMonth(`${lastMonthCovered({ period_start: `${f.start}-01`, plan_months: months as 1 })}-01`, 'short')}`
+    ? `${formatMonth(`${f.start}-01`, 'short')} – ${formatMonth(`${lastMonthCovered({ period_start: `${f.start}-01`, plan_months: months as PlanMonths })}-01`, 'short')}`
     : '';
 
   const save = async () => {

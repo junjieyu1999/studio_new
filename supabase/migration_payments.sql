@@ -6,7 +6,7 @@
 -- What it adds
 --   mail_subscribers  + payment_ref       a short code (PC0001…) the subscriber writes on their
 --                                         PayNow / Revolut transfer so you can match it to them
---                     + plan_months       the plan they chose: 1, 3, 6 or 12 months
+--                     + plan_months       the plan they chose: 3, 6 or 12 months
 --                     + preferred_method  how they said they would pay
 --   mail_plans        the four plans and your price for each (price is blank until you set it)
 --   mail_payments     one row per payment you receive. Each covers a block of months starting at
@@ -22,7 +22,7 @@ create sequence if not exists public.mail_payment_ref_seq;
 
 alter table public.mail_subscribers add column if not exists payment_ref      text;
 alter table public.mail_subscribers add column if not exists plan_months      smallint
-  check (plan_months in (1, 3, 6, 12));
+  check (plan_months in (3, 6, 12));
 alter table public.mail_subscribers add column if not exists preferred_method text
   check (preferred_method in ('paynow', 'revolut', 'bank', 'other'));
 
@@ -56,14 +56,14 @@ alter table public.mail_subscribers alter column payment_ref set not null;
 create unique index if not exists mail_subscribers_payment_ref_key
   on public.mail_subscribers (payment_ref);
 
--- ── Plans: 1, 3, 6 and 12 months ─────────────────────────────────
+-- ── Plans: 3, 6 and 12 months (there is no 1-month plan) ─────────
 create table if not exists public.mail_plans (
-  months      smallint      primary key check (months in (1, 3, 6, 12)),
+  months      smallint      primary key check (months in (3, 6, 12)),
   price       numeric(10,2) check (price >= 0),        -- S$ for the whole plan; NULL = not set yet
   is_active   boolean       not null default true,     -- untick to stop offering a plan
   updated_at  timestamptz   not null default now()
 );
-insert into public.mail_plans (months) values (1), (3), (6), (12)
+insert into public.mail_plans (months) values (3), (6), (12)
   on conflict (months) do nothing;
 
 -- ── Payments ─────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ create table if not exists public.mail_payments (
   paid_on        date          not null default current_date,
   method         text          not null
                  check (method in ('paynow', 'revolut', 'bank', 'other')),
-  plan_months    smallint      not null check (plan_months in (1, 3, 6, 12)),
+  plan_months    smallint      not null check (plan_months in (3, 6, 12)),
   period_start   date          not null
                  check (extract(day from period_start) = 1),   -- first month covered (always the 1st)
   amount         numeric(10,2) not null check (amount >= 0),   -- what the customer sent
@@ -85,6 +85,29 @@ create table if not exists public.mail_payments (
   notes          text,
   created_at     timestamptz   not null default now()
 );
+
+-- ── Upgrade from the first version of this file (which also had a 1-month plan) ──
+-- Safe on a fresh install and when re-run. Removes the 1-month plan, clears any subscriber's
+-- chosen 1-month plan, and tightens the checks. If a 1-month PAYMENT was already recorded it stops
+-- with a message instead of changing your payment history.
+do $$
+declare legacy int;
+begin
+  select count(*) into legacy from public.mail_payments where plan_months = 1;
+  if legacy > 0 then
+    raise exception 'There are % recorded payment(s) on the old 1-month plan. Delete them or re-record them as a 3, 6 or 12 month plan, then run this file again.', legacy;
+  end if;
+
+  update public.mail_subscribers set plan_months = null where plan_months = 1;
+  delete from public.mail_plans where months = 1;
+
+  alter table public.mail_subscribers drop constraint if exists mail_subscribers_plan_months_check;
+  alter table public.mail_subscribers add  constraint mail_subscribers_plan_months_check check (plan_months in (3, 6, 12));
+  alter table public.mail_plans       drop constraint if exists mail_plans_months_check;
+  alter table public.mail_plans       add  constraint mail_plans_months_check check (months in (3, 6, 12));
+  alter table public.mail_payments    drop constraint if exists mail_payments_plan_months_check;
+  alter table public.mail_payments    add  constraint mail_payments_plan_months_check check (plan_months in (3, 6, 12));
+end $$;
 
 create index if not exists mail_payments_subscriber_idx on public.mail_payments (subscriber_id);
 create index if not exists mail_payments_paid_on_idx    on public.mail_payments (paid_on);

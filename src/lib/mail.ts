@@ -10,8 +10,8 @@ export const SUBSCRIBER_STATUSES = ['active', 'paused', 'cancelled'] as const;
 export const ISSUE_STATUSES      = ['planning', 'printing', 'ready', 'shipped'] as const;
 export const SHIPMENT_STATUSES   = ['pending', 'printed', 'mailed', 'delivered', 'returned'] as const;
 
-// Payment plans (months paid up front) and how people pay.
-export const PLAN_MONTHS     = [1, 3, 6, 12] as const;
+// Payment plans offered (months paid up front) and how people pay. There is no 1-month plan.
+export const PLAN_MONTHS     = [3, 6, 12] as const;
 export const PAYMENT_METHODS = ['paynow', 'revolut', 'bank', 'other'] as const;
 export const PAYMENT_STATUSES = ['received', 'refunded'] as const;
 

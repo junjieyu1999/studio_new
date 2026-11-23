@@ -1,4 +1,4 @@
-// PATCH /api/admin/mail/plans/[months] — set the price of a plan (1, 3, 6 or 12 months)
+// PATCH /api/admin/mail/plans/[months] — set the price of a plan (3, 6 or 12 months)
 // or switch it on/off. Plans themselves cannot be added or removed.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ mo
   const { months } = await params;
   const m = Number(months);
   if (!(PLAN_MONTHS as readonly number[]).includes(m)) {
-    return NextResponse.json({ error: 'Plans are 1, 3, 6 or 12 months.' }, { status: 400 });
+    return NextResponse.json({ error: 'Plans are 3, 6 or 12 months.' }, { status: 400 });
   }
 
   const parsed = parseBody(await req.json().catch(() => null), PLAN_SCHEMA);

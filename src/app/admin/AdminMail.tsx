@@ -104,7 +104,7 @@ type SubForm = {
   postal_code: string; country: string;
   status: SubscriberStatus; price_per_issue: string;
   source: string; notes: string; joined_on: string;
-  plan_months: string;                      // '' (none) or '1' | '3' | '6' | '12'
+  plan_months: string;                      // '' (none) or '3' | '6' | '12'
   preferred_method: '' | PaymentMethod;
 };
 
