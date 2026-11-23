@@ -391,3 +391,79 @@
 .designActions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .fileHidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .rowThumb { width: 44px; height: 30px; object-fit: cover; border-radius: 2px; margin-right: 0.6rem; flex-shrink: 0; align-self: center; }
+
+/* ── Payments (plans, payment CRM) ── */
+.payBadge {
+  display: inline-block;
+  font-family: var(--ff-serif), Georgia, serif;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.5rem;
+  border-radius: 2px;
+  border: 1px solid var(--abo);
+  color: var(--am);
+  white-space: nowrap;
+}
+.payPaid   { color: #3d6b4a; border-color: rgba(61, 107, 74, 0.5);  background: rgba(61, 107, 74, 0.08); }
+.payFree   { color: var(--am); }
+.payRenew  { color: #8B6842; border-color: rgba(139, 104, 66, 0.55); background: rgba(139, 104, 66, 0.1); }
+.payLapsed { color: #b03a2e; border-color: rgba(176, 58, 46, 0.5);  background: rgba(176, 58, 46, 0.07); }
+
+.paySummary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem; }
+.payLine { font-size: 0.8rem; font-weight: 300; line-height: 1.5; }
+.payLine strong { font-weight: 500; }
+
+.refRow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.refLabel { font-size: 0.7rem; letter-spacing: 0.03em; color: var(--am); }
+.refCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--abo);
+  border-radius: var(--radius);
+  background: var(--as);
+  user-select: all;
+}
+
+.payForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--abo);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.45);
+}
+.payForm .sectionLabel { margin-bottom: 0; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; }
+.tile { padding: 0.9rem 1rem; border: 1px solid var(--abo); border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.45); }
+.tileLabel { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--am); }
+.tileValue { font-size: 1.5rem; font-weight: 300; margin-top: 0.25rem; }
+.tileSub { font-size: 0.7rem; color: var(--am); margin-top: 0.15rem; line-height: 1.5; }
+
+.planRow { display: grid; grid-template-columns: 7rem minmax(0, 15rem) auto auto; justify-content: start; gap: 0.75rem 1.25rem; align-items: end; }
+.planRow .planName { padding-bottom: 0.55rem; }
+.planName { font-size: 0.85rem; }
+.planPer { font-size: 0.7rem; color: var(--am); }
+@media (max-width: 720px) {
+  .planRow { grid-template-columns: 1fr 1fr; }
+}
+.rowChips { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.3rem; }
+.payPage { display: flex; flex-direction: column; gap: 1.5rem; }
+.linkBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--aa);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkBtn:hover { color: var(--at); }
+
+.unpaidNote { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.7rem 0.9rem; border: 1px solid rgba(139, 104, 66, 0.4); border-radius: var(--radius); background: rgba(139, 104, 66, 0.06); }

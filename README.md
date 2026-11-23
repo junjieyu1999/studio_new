@@ -9,7 +9,17 @@ A monthly postcard service: a public page for sign-ups, and an admin to run it.
 
 ### One-time setup
 1. In the Supabase **SQL Editor**, run `supabase/migration_snail_mail.sql` (safe to re-run). It creates `mail_subscribers`, `mail_issues` and `mail_shipments`. They hold home addresses, so Row Level Security is on with no public access: only the server (service role key) can read them.
-2. No new environment variables. It uses the existing `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_PASSWORD` (and optional `ADMIN_USER`). If `ADMIN_PASSWORD` is unset in production, all admin pages and APIs refuse every request.
+2. To track payment plans, then run `supabase/migration_payments.sql` (also safe to re-run, and it must come after the first one). It adds the 1, 3, 6 and 12 month plans, a payment ledger, and a unique reference code (`PC0001`, `PC0002`, ...) for every subscriber. Until you run it the admin still works; the Payments features just show a notice asking you to run it.
+3. No new environment variables. It uses the existing `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_PASSWORD` (and optional `ADMIN_USER`). If `ADMIN_PASSWORD` is unset in production, all admin pages and APIs refuse every request.
+
+### Payment plans (PayNow and Revolut)
+Money never passes through the site. Subscribers pay you directly, and you record it in *Snail mail → Payments*.
+- **Plans and prices**: set what you charge for 1, 3, 6 and 12 months (in S$, for the whole plan). Prices start blank. They only prefill the amount when you record a payment, and untick *Offered* to stop offering a plan.
+- **Reference code**: every subscriber has a code like `PC0001` (shown on their record with a Copy button). Ask them to put it in the PayNow or Revolut transfer reference so you can match the payment in your bank app.
+- **Recording a payment**: use *Record a payment* (Payments tab, or on a subscriber). Pick the plan, the first month it covers, how they paid and the date you received it. For a foreign currency (Revolut), enter the amount and currency plus what it was worth in S$, so profit and totals stay in S$. Recording a plan that overlaps months they already paid for asks you to confirm.
+- **Status**: each subscriber shows *Paid*, *Renewal due* (covered this month but not next), *Lapsed* (covered before, not now), *Not paid yet* or *Free* (price per issue 0). The Payments tab lists everyone who needs a payment, and Overview flags them too.
+- **Refunds**: *Refund* keeps the record but stops it covering any months and removes it from the totals. Payments cannot be edited into a different plan or period; delete and re-record instead.
+- **Mailing only paid subscribers**: when generating shipments, tick *Leave them out when I generate shipments* to skip active subscribers who have not paid for that month.
 
 ### Running it
 - **Subscribers**: when someone fills in the Google Form, add them under *Snail mail → Subscribers*. Only *Active* subscribers get a postcard.

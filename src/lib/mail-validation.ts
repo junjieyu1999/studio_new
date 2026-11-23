@@ -9,12 +9,16 @@ import {
   SUBSCRIBER_STATUSES,
   ISSUE_STATUSES,
   SHIPMENT_STATUSES,
+  PLAN_MONTHS,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
 } from './mail';
 
 type Rule =
-  | { kind: 'text'; max: number; nullable?: boolean; format?: 'email' | 'slug' }
-  | { kind: 'enum'; values: readonly string[] }
-  | { kind: 'number'; min: number; max: number }
+  | { kind: 'text'; max: number; nullable?: boolean; format?: 'email' | 'slug' | 'currency' }
+  | { kind: 'enum'; values: readonly string[]; nullable?: boolean }
+  | { kind: 'int'; values: readonly number[]; nullable?: boolean }   // a whole number from a fixed list
+  | { kind: 'number'; min: number; max: number; nullable?: boolean }
   | { kind: 'bool' }
   | { kind: 'date'; nullable?: boolean }
   | { kind: 'month' };
@@ -71,17 +75,33 @@ export function parseBody(body: unknown, schema: Schema, required: string[] = []
         if (rule.format === 'slug' && !/^[a-z0-9-]+$/.test(v)) {
           return { ok: false, error: `${label(key)} is not valid.` };
         }
+        if (rule.format === 'currency') {
+          if (!/^[A-Za-z]{3}$/.test(v)) return { ok: false, error: 'Currency must be a 3-letter code such as SGD or USD.' };
+          data[key] = v.toUpperCase();
+          break;
+        }
         data[key] = v;
         break;
       }
       case 'enum': {
+        if ((raw === null || raw === '') && rule.nullable) { data[key] = null; break; }
         if (typeof raw !== 'string' || !rule.values.includes(raw)) {
           return { ok: false, error: `${label(key)} must be one of: ${rule.values.join(', ')}.` };
         }
         data[key] = raw;
         break;
       }
+      case 'int': {
+        if ((raw === null || raw === '') && rule.nullable) { data[key] = null; break; }
+        const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+        if (typeof n !== 'number' || !rule.values.includes(n)) {
+          return { ok: false, error: `${label(key)} must be one of: ${rule.values.join(', ')}.` };
+        }
+        data[key] = n;
+        break;
+      }
       case 'number': {
+        if ((raw === null || raw === '') && rule.nullable) { data[key] = null; break; }
         const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
         if (typeof n !== 'number' || !Number.isFinite(n) || n < rule.min || n > rule.max) {
           return { ok: false, error: `${label(key)} must be a number between ${rule.min} and ${rule.max}.` };
@@ -136,6 +156,8 @@ export const SUBSCRIBER_SCHEMA: Schema = {
   source:          { kind: 'text', max: 100, nullable: true },
   notes:           { kind: 'text', max: 2000, nullable: true },
   joined_on:       { kind: 'date' },
+  plan_months:      { kind: 'int',  values: PLAN_MONTHS, nullable: true },
+  preferred_method: { kind: 'enum', values: PAYMENT_METHODS, nullable: true },
 };
 export const SUBSCRIBER_REQUIRED = ['name', 'address_line1'];
 
@@ -167,9 +189,39 @@ export const SHIPMENT_SCHEMA: Schema = {
   notes:          { kind: 'text', max: 2000, nullable: true },
 };
 
+// ── Payments and plans (field names match supabase/migration_payments.sql) ──
+// `subscriber_id` is checked separately (it must be a real UUID); it can only be set on create.
+export const PAYMENT_SCHEMA: Schema = {
+  paid_on:      { kind: 'date' },
+  method:       { kind: 'enum', values: PAYMENT_METHODS },
+  plan_months:  { kind: 'int',  values: PLAN_MONTHS },
+  period_start: { kind: 'month' },
+  amount:       { kind: 'number', min: 0, max: 1000000 },
+  currency:     { kind: 'text', max: 3, format: 'currency' },
+  amount_sgd:   { kind: 'number', min: 0, max: 1000000 },
+  reference:    { kind: 'text', max: 120, nullable: true },
+  status:       { kind: 'enum', values: PAYMENT_STATUSES },
+  notes:        { kind: 'text', max: 2000, nullable: true },
+};
+export const PAYMENT_REQUIRED = ['paid_on', 'method', 'plan_months', 'period_start', 'amount'];
+
+/** After creation only these can change; the plan, period and subscriber are fixed (delete and re-add to change them). */
+export const PAYMENT_EDIT_FIELDS = ['paid_on', 'method', 'amount', 'currency', 'amount_sgd', 'reference', 'status', 'notes'] as const;
+
+export const PLAN_SCHEMA: Schema = {
+  price:     { kind: 'number', min: 0, max: 100000, nullable: true },
+  is_active: { kind: 'bool' },
+};
+
 /** Row ids come from the URL; make sure they really are UUIDs before querying. */
 export function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+
+/** True when a table does not exist yet (Postgres says 42P01; the Supabase REST layer says PGRST205). */
+export function isMissingTable(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  return code === '42P01' || code === 'PGRST205';
 }
 
 /** Turns a Postgres/PostgREST error into a message that is safe and useful to show. */
@@ -179,7 +231,8 @@ export function friendlyDbError(err: { code?: string; message?: string }): { mes
     case '23001': // ON DELETE RESTRICT
     case '23503': return { message: 'This is linked to other records (for example shipments), or points at something that does not exist.', status: 409 };
     case '23514': return { message: 'One of the values is outside the allowed range.', status: 400 };
-    case '42P01': return { message: 'The snail mail tables are missing. Run supabase/migration_snail_mail.sql in the Supabase SQL Editor.', status: 500 };
+    case '42P01':
+    case 'PGRST205': return { message: 'A snail mail table is missing. In the Supabase SQL Editor, run supabase/migration_snail_mail.sql and then supabase/migration_payments.sql.', status: 500 };
     default:      return { message: 'Database error.', status: 500 };
   }
 }

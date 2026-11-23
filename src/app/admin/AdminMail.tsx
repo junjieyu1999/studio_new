@@ -8,11 +8,17 @@ import { useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import {
   type MailData, type MailIssue, type MailShipment, type MailSubscriber,
-  type IssueStatus, type ShipmentStatus, type SubscriberStatus,
-  ISSUE_STATUSES, SHIPMENT_STATUSES, SUBSCRIBER_STATUSES,
+  type IssueStatus, type PaymentMethod, type ShipmentStatus, type SubscriberStatus,
+  ISSUE_STATUSES, PAYMENT_METHODS, PLAN_MONTHS, SHIPMENT_STATUSES, SUBSCRIBER_STATUSES,
   addMonths, addressLines, formatMonth, money, shipmentMoney, todaySG,
 } from '@/lib/mail';
+import {
+  METHOD_LABEL, isCovered, payStatus, paymentsBySubscriber, planLabel,
+} from '@/lib/mail-payments';
 import { adminApi } from '@/lib/admin-fetch';
+import AdminPayments from './AdminPayments';
+import PayBadge from './PayBadge';
+import SubscriberPayments from './SubscriberPayments';
 import styles from './AdminMail.module.css';
 
 interface Props {
@@ -22,7 +28,7 @@ interface Props {
   onChanged: () => Promise<void> | void;
 }
 
-type View   = 'issues' | 'subscribers';
+type View   = 'issues' | 'subscribers' | 'payments';
 type Notice = { kind: 'ok' | 'err'; text: string } | null;
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -98,6 +104,8 @@ type SubForm = {
   postal_code: string; country: string;
   status: SubscriberStatus; price_per_issue: string;
   source: string; notes: string; joined_on: string;
+  plan_months: string;                      // '' (none) or '1' | '3' | '6' | '12'
+  preferred_method: '' | PaymentMethod;
 };
 
 const blankSub = (): SubForm => ({
@@ -106,6 +114,7 @@ const blankSub = (): SubForm => ({
   postal_code: '', country: 'Singapore',
   status: 'active', price_per_issue: '0',
   source: '', notes: '', joined_on: todaySG(),
+  plan_months: '', preferred_method: '',
 });
 
 function subToForm(s: MailSubscriber): SubForm {
@@ -116,6 +125,8 @@ function subToForm(s: MailSubscriber): SubForm {
     postal_code: s.postal_code ?? '', country: s.country,
     status: s.status, price_per_issue: String(s.price_per_issue),
     source: s.source ?? '', notes: s.notes ?? '', joined_on: s.joined_on,
+    plan_months: s.plan_months ? String(s.plan_months) : '',
+    preferred_method: s.preferred_method ?? '',
   };
 }
 
@@ -123,6 +134,7 @@ function subToForm(s: MailSubscriber): SubForm {
 export default function AdminMail({ data, loading, error, onChanged }: Props) {
   const [view, setView] = useState<View>('issues');
   const [notice, setNotice] = useState<Notice>(null);
+  const [focusSubId, setFocusSubId] = useState<string | null>(null);   // subscriber to open when jumping from Payments
 
   const say = (kind: 'ok' | 'err', text: string) => {
     setNotice({ kind, text });
@@ -140,14 +152,26 @@ export default function AdminMail({ data, loading, error, onChanged }: Props) {
     );
   }
 
+  const needPayment = data.paymentsSetupNeeded ? 0 : (() => {
+    const by = paymentsBySubscriber(data.payments);
+    return data.subscribers.filter((s) => {
+      if (s.status !== 'active') return false;
+      const st = payStatus(s, by.get(s.id) ?? []).state;
+      return st === 'lapsed' || st === 'unpaid' || st === 'renew';
+    }).length;
+  })();
+
   return (
     <div className={styles.page}>
       <div className={styles.subnav}>
         <button className={`${styles.subTab} ${view === 'issues' ? styles.subTabOn : ''}`} onClick={() => { setView('issues'); setNotice(null); }}>
           Monthly issues <span className={styles.count}>{data.issues.length}</span>
         </button>
-        <button className={`${styles.subTab} ${view === 'subscribers' ? styles.subTabOn : ''}`} onClick={() => { setView('subscribers'); setNotice(null); }}>
+        <button className={`${styles.subTab} ${view === 'subscribers' ? styles.subTabOn : ''}`} onClick={() => { setFocusSubId(null); setView('subscribers'); setNotice(null); }}>
           Subscribers <span className={styles.count}>{data.subscribers.length}</span>
+        </button>
+        <button className={`${styles.subTab} ${view === 'payments' ? styles.subTabOn : ''}`} onClick={() => { setView('payments'); setNotice(null); }}>
+          Payments {needPayment > 0 && <span className={styles.count} title="Subscribers who need to pay or renew">{needPayment}</span>}
         </button>
       </div>
 
@@ -158,9 +182,12 @@ export default function AdminMail({ data, loading, error, onChanged }: Props) {
         </p>
       )}
 
-      {view === 'issues'
-        ? <IssuesView data={data} say={say} onChanged={onChanged} />
-        : <SubscribersView data={data} say={say} onChanged={onChanged} />}
+      {view === 'issues' && <IssuesView data={data} say={say} onChanged={onChanged} />}
+      {view === 'subscribers' && <SubscribersView data={data} say={say} onChanged={onChanged} initialId={focusSubId} />}
+      {view === 'payments' && (
+        <AdminPayments data={data} say={say} onChanged={onChanged}
+          onOpenSubscriber={(id) => { setFocusSubId(id); setView('subscribers'); setNotice(null); }} />
+      )}
     </div>
   );
 }
@@ -179,6 +206,7 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
   const [form, setForm] = useState<IssueForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState('');          // id of the shipment/action being processed
+  const [onlyPaid, setOnlyPaid] = useState(false); // generate shipments only for subscribers who have paid
   const [imgBusy, setImgBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -193,6 +221,15 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
     () => (selected ? data.shipments.filter((s) => s.issue_id === selected.id) : []),
     [data.shipments, selected]
   );
+
+  // Active subscribers who are not yet in this issue and have not paid for its month.
+  const unpaidForIssue = useMemo(() => {
+    if (!selected || data.paymentsSetupNeeded) return [];
+    const ym = selected.issue_month.slice(0, 7);
+    const have = new Set(shipments.map((sh) => sh.subscriber_id));
+    const by = paymentsBySubscriber(data.payments);
+    return data.subscribers.filter((sub) => sub.status === 'active' && !have.has(sub.id) && !isCovered(sub, by.get(sub.id) ?? [], ym));
+  }, [selected, shipments, data.payments, data.subscribers, data.paymentsSetupNeeded]);
 
   const counts = (issueId: string) => {
     const list = data.shipments.filter((s) => s.issue_id === issueId);
@@ -303,13 +340,14 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
     if (!selected) return;
     setBusy('generate');
     try {
-      const json = await adminApi('POST', `/api/admin/mail/issues/${selected.id}/generate`);
+      const json = await adminApi('POST', `/api/admin/mail/issues/${selected.id}/generate`, { only_paid: onlyPaid });
       await onChanged();
       const created = Number(json.created ?? 0);
       const skipped = Number(json.skipped ?? 0);
+      const leftOut = Number(json.left_out ?? 0);
       say('ok', typeof json.message === 'string'
         ? json.message
-        : `Created ${created} shipment${created === 1 ? '' : 's'}${skipped ? `, ${skipped} already existed` : ''}.`);
+        : `Created ${created} shipment${created === 1 ? '' : 's'}${skipped ? `, ${skipped} already existed` : ''}${leftOut ? `, ${leftOut} left out because they have not paid` : ''}.`);
     } catch (e) {
       say('err', e instanceof Error ? e.message : 'Could not generate shipments.');
     } finally {
@@ -575,6 +613,19 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
                   <button className={styles.btn} onClick={copyList}>Copy addresses to mail</button>
                 </div>
 
+                {!data.paymentsSetupNeeded && unpaidForIssue.length > 0 && (
+                  <div className={styles.unpaidNote}>
+                    <span className={styles.hintWarn}>
+                      {unpaidForIssue.length} active subscriber{unpaidForIssue.length === 1 ? ' who is' : 's who are'} not yet in this issue {unpaidForIssue.length === 1 ? 'has' : 'have'} not paid for {formatMonth(selected.issue_month)}:{' '}
+                      {unpaidForIssue.slice(0, 6).map((u) => u.name).join(', ')}{unpaidForIssue.length > 6 ? ` and ${unpaidForIssue.length - 6} more` : ''}.
+                    </span>
+                    <label className={styles.check}>
+                      <input type="checkbox" checked={onlyPaid} onChange={(e) => setOnlyPaid(e.target.checked)} />
+                      <span>Leave them out when I generate shipments</span>
+                    </label>
+                  </div>
+                )}
+
                 {shipments.length === 0 ? (
                   <p className={styles.empty}>No shipments yet. Add subscribers, then generate shipments.</p>
                 ) : (
@@ -625,9 +676,11 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
 // ═════════════════════════════════════════════════════════════════
 // SUBSCRIBERS
 // ═════════════════════════════════════════════════════════════════
-function SubscribersView({ data, say, onChanged }: ViewProps) {
-  const [selectedId, setSelectedId] = useState<string | 'new' | null>(null);
-  const [form, setForm] = useState<SubForm | null>(null);
+function SubscribersView({ data, say, onChanged, initialId }: ViewProps & { initialId: string | null }) {
+  // `initialId` opens a subscriber straight away (used when jumping over from the Payments tab).
+  const initialSub = initialId ? data.subscribers.find((x) => x.id === initialId) ?? null : null;
+  const [selectedId, setSelectedId] = useState<string | 'new' | null>(initialSub ? initialSub.id : null);
+  const [form, setForm] = useState<SubForm | null>(initialSub ? subToForm(initialSub) : null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<'all' | SubscriberStatus>('all');
   const [query, setQuery] = useState('');
@@ -637,12 +690,13 @@ function SubscribersView({ data, say, onChanged }: ViewProps) {
     return data.subscribers.filter((s) => {
       if (filter !== 'all' && s.status !== filter) return false;
       if (!q) return true;
-      return [s.name, s.email ?? '', s.country, s.city ?? '', s.postal_code ?? '']
+      return [s.name, s.email ?? '', s.country, s.city ?? '', s.postal_code ?? '', s.payment_ref ?? '']
         .some((v) => v.toLowerCase().includes(q));
     });
   }, [data.subscribers, filter, query]);
 
   const selected = selectedId && selectedId !== 'new' ? data.subscribers.find((s) => s.id === selectedId) ?? null : null;
+  const paysBySub = useMemo(() => paymentsBySubscriber(data.payments), [data.payments]);
 
   const pick = (s: MailSubscriber) => { setSelectedId(s.id); setForm(subToForm(s)); };
   const startNew = () => { setSelectedId('new'); setForm(blankSub()); };
@@ -660,6 +714,11 @@ function SubscribersView({ data, say, onChanged }: ViewProps) {
         status: form.status, price_per_issue: num(form.price_per_issue),
         source: form.source, notes: form.notes,
         ...(form.joined_on ? { joined_on: form.joined_on } : {}),
+        // Only sent once payment tracking is set up, so saving still works before the migration is run.
+        ...(data.paymentsSetupNeeded ? {} : {
+          plan_months: form.plan_months === '' ? null : Number(form.plan_months),
+          preferred_method: form.preferred_method === '' ? null : form.preferred_method,
+        }),
       };
       if (selectedId === 'new') {
         const json = await adminApi('POST', '/api/admin/mail/subscribers', payload);
@@ -701,7 +760,7 @@ function SubscribersView({ data, say, onChanged }: ViewProps) {
           <button className={styles.btnPrimarySm} onClick={startNew}>+ Add</button>
         </div>
         <div className={styles.filters}>
-          <input type="search" placeholder="Search name, email, country…" value={query}
+          <input type="search" placeholder="Search name, email, reference…" value={query}
             onChange={(e) => setQuery(e.target.value)} aria-label="Search subscribers" />
           <select value={filter} onChange={(e) => setFilter(e.target.value as 'all' | SubscriberStatus)} aria-label="Filter by status">
             <option value="all">All</option>
@@ -717,6 +776,11 @@ function SubscribersView({ data, say, onChanged }: ViewProps) {
             <span className={styles.rowMain}>
               <span className={styles.rowTitle}>{s.name}</span>
               <span className={styles.rowMeta}>{s.city ? `${s.city}, ` : ''}{s.country} · {s.status}</span>
+              {!data.paymentsSetupNeeded && s.status === 'active' && (
+                <span className={styles.rowChips}>
+                  <PayBadge status={payStatus(s, paysBySub.get(s.id) ?? [])} />
+                </span>
+              )}
             </span>
           </button>
         ))}
@@ -803,10 +867,38 @@ function SubscribersView({ data, say, onChanged }: ViewProps) {
                 </label>
               </div>
               <span className={styles.hint}>Only Active subscribers get a postcard when you generate shipments. Use 0 for free.</span>
+              {!data.paymentsSetupNeeded && (
+                <div className={styles.grid4}>
+                  <label className={styles.field}>Plan they chose
+                    <select value={form.plan_months} onChange={(e) => set('plan_months', e.target.value)}>
+                      <option value="">Not chosen</option>
+                      {PLAN_MONTHS.map((m) => <option key={m} value={m}>{planLabel(m)}</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.field}>Pays by
+                    <select value={form.preferred_method} onChange={(e) => set('preferred_method', e.target.value as '' | PaymentMethod)}>
+                      <option value="">Not chosen</option>
+                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
+                    </select>
+                  </label>
+                </div>
+              )}
               <label className={styles.field}>Notes
                 <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
               </label>
             </div>
+
+            {selected && (
+              <SubscriberPayments
+                subscriber={selected}
+                payments={paysBySub.get(selected.id) ?? []}
+                allPayments={data.payments}
+                plans={data.plans}
+                setupNeeded={data.paymentsSetupNeeded}
+                onChanged={onChanged}
+                say={say}
+              />
+            )}
           </>
         )}
       </section>
