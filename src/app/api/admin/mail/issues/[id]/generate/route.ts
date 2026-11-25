@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { getAdminClient } from '@/lib/supabase-admin';
-import { isUuid, friendlyDbError, isMissingTable } from '@/lib/mail-validation';
+import { isUuid, friendlyDbError, isMissingTable, isMissingColumn } from '@/lib/mail-validation';
 import { isLocalCountry, type MailPayment } from '@/lib/mail';
 import { paymentCovers } from '@/lib/mail-payments';
 
@@ -85,7 +85,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (onlyPaid && !paymentsReady) {
       return NextResponse.json({ error: 'Payment tracking is not set up yet. Run supabase/migration_payments.sql first.' }, { status: 400 });
     }
-    const isPaid = (s: { id: string; price_per_issue: number }) => Number(s.price_per_issue) === 0 || paidIds.has(s.id);
+
+    // Subscribers on a "no payment needed" plan (Friends & family) never count as unpaid.
+    // Needs migration_custom_plans.sql; before it there are no such plans, so nobody is added.
+    const complimentaryIds = new Set<string>();
+    if (paymentsReady) {
+      const { data: cps, error: cpErr } = await admin.from('mail_plans').select('id').eq('is_complimentary', true);
+      if (cpErr && !isMissingColumn(cpErr)) {
+        const f = friendlyDbError(cpErr);
+        return NextResponse.json({ error: f.message }, { status: f.status });
+      }
+      const planIds = (cps ?? []).map((r: { id: string }) => r.id);
+      if (!cpErr && planIds.length > 0) {
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await admin
+            .from('mail_subscribers')
+            .select('id')
+            .in('plan_id', planIds)
+            .order('id', { ascending: true })
+            .range(from, from + 999);
+          if (error) {
+            const f = friendlyDbError(error);
+            return NextResponse.json({ error: f.message }, { status: f.status });
+          }
+          for (const r of data ?? []) complimentaryIds.add(r.id as string);
+          if (!data || data.length < 1000) break;
+        }
+      }
+    }
+    const isPaid = (s: { id: string; price_per_issue: number }) =>
+      Number(s.price_per_issue) === 0 || complimentaryIds.has(s.id) || paidIds.has(s.id);
     const unpaid = paymentsReady ? subscribers.filter((s) => !isPaid(s)).length : 0;
     const included = onlyPaid ? subscribers.filter(isPaid) : subscribers;
 

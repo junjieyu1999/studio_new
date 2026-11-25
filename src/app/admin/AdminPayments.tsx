@@ -2,23 +2,23 @@
 
 // Snail mail → Payments. The money side of the subscription CRM:
 //   • totals (received this month / in total / by method)
-//   • your price for each plan (3, 6 and 12 months)
+//   • your plans and prices (3, 6 and 12 months, Friends & family, or any you add)
 //   • who needs to pay or renew
 //   • every payment, newest first
 // All figures are computed from the payments you record, in Singapore dollars.
 
 import { useMemo, useState } from 'react';
 import {
-  type MailData, type PaymentMethod,
-  PAYMENT_METHODS, PLAN_MONTHS, formatMonth, money,
+  type MailData, type MailPlan, type PaymentMethod,
+  PAYMENT_METHODS, formatMonth, money,
 } from '@/lib/mail';
 import {
-  METHOD_LABEL, currentMonthSG, payStatus, paymentsBySubscriber, planLabel, receivedTotal,
+  METHOD_LABEL, currentMonthSG, payStatus, paymentsBySubscriber, planOf, receivedTotal,
 } from '@/lib/mail-payments';
 import { adminApi } from '@/lib/admin-fetch';
 import RecordPaymentForm from './RecordPaymentForm';
 import PayBadge from './PayBadge';
-import { coverageText } from './SubscriberPayments';
+import { PlanCell, coverageText } from './SubscriberPayments';
 import styles from './AdminMail.module.css';
 
 interface Props {
@@ -30,13 +30,18 @@ interface Props {
 
 const month = (ym: string) => formatMonth(`${ym}-01`, 'short');
 
+// Unsaved changes to a plan row (kept as text while typing).
+interface PlanEdit { name?: string; months?: string; price?: string; is_active?: boolean; is_complimentary?: boolean }
+
 export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }: Props) {
   const [recordFor, setRecordFor] = useState<string | 'any' | null>(null);
   const [methodFilter, setMethodFilter] = useState<'all' | PaymentMethod>('all');
   const [showRefunded, setShowRefunded] = useState(false);
   const [query, setQuery] = useState('');
-  const [edits, setEdits] = useState<Record<number, { price?: string; is_active?: boolean }>>({});
-  const [savingPlan, setSavingPlan] = useState<number | null>(null);
+  const [edits, setEdits] = useState<Record<string, PlanEdit>>({});
+  const [savingPlan, setSavingPlan] = useState<string | null>(null);
+  const [newPlan, setNewPlan] = useState<PlanEdit>({ name: '', months: '12', price: '', is_complimentary: false });
+  const [addingPlan, setAddingPlan] = useState(false);
 
   const nowYm = currentMonthSG();
   const subById = useMemo(() => new Map(data.subscribers.map((s) => [s.id, s])), [data.subscribers]);
@@ -45,7 +50,7 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
     const bySub = paymentsBySubscriber(data.payments);
     const rows = data.subscribers
       .filter((s) => s.status === 'active')
-      .map((s) => ({ sub: s, status: payStatus(s, bySub.get(s.id) ?? [], nowYm) }));
+      .map((s) => ({ sub: s, status: payStatus(s, bySub.get(s.id) ?? [], nowYm, data.plans) }));
     const attention = rows
       .filter((r) => r.status.state === 'lapsed' || r.status.state === 'unpaid' || r.status.state === 'renew')
       .sort((a, b) => a.status.nextUnpaid.localeCompare(b.status.nextUnpaid) || a.sub.name.localeCompare(b.sub.name));
@@ -62,7 +67,7 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
       total: receivedTotal(received), count: received.length,
       byMethod,
     };
-  }, [data.payments, data.subscribers, nowYm]);
+  }, [data.payments, data.subscribers, data.plans, nowYm]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -82,36 +87,93 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
       <div className={styles.section}>
         <div className={styles.sectionLabel}>Payments</div>
         <p className={styles.hintWarn}>
-          Payment tracking is not set up yet. In the Supabase SQL Editor, run <code>supabase/migration_payments.sql</code> (after
-          <code> migration_snail_mail.sql</code>), then reload this page.
+          Payment tracking is not set up yet. In the Supabase SQL Editor, run <code>supabase/migration_payments.sql</code> and then
+          <code> supabase/migration_custom_plans.sql</code> (each only needs to be run once), then reload this page.
         </p>
       </div>
     );
   }
 
-  const planDraft = (months: number) => {
-    const plan = data.plans.find((p) => p.months === months);
+  const planDraft = (plan: MailPlan) => {
+    const e = edits[plan.id];
     return {
-      price: edits[months]?.price ?? (plan?.price === null || plan?.price === undefined ? '' : String(plan.price)),
-      active: edits[months]?.is_active ?? plan?.is_active ?? true,
-      dirty: edits[months] !== undefined,
+      name: e?.name ?? plan.name,
+      months: e?.months ?? String(plan.months),
+      price: e?.price ?? (plan.price === null ? '' : String(plan.price)),
+      active: e?.is_active ?? plan.is_active,
+      comp: e?.is_complimentary ?? plan.is_complimentary,
+      dirty: e !== undefined,
     };
   };
+  const editPlan = (id: string, patch: PlanEdit) => setEdits((x) => ({ ...x, [id]: { ...x[id], ...patch } }));
 
-  const savePlan = async (months: number) => {
-    const d = planDraft(months);
-    setSavingPlan(months);
+  const planProblem = (name: string, months: string, price: string): string => {
+    if (name.trim() === '') return 'Give the plan a name.';
+    const m = Number(months);
+    if (months.trim() === '' || !Number.isInteger(m) || m < 1 || m > 120) return 'Months must be a whole number from 1 to 120.';
+    if (price.trim() !== '' && (!Number.isFinite(Number(price)) || Number(price) < 0)) return 'The price must be a number, or left blank.';
+    return '';
+  };
+
+  const savePlan = async (plan: MailPlan) => {
+    const d = planDraft(plan);
+    const problem = planProblem(d.name, d.months, d.price);
+    if (problem) return say('err', problem);
+    setSavingPlan(plan.id);
     try {
-      await adminApi('PATCH', `/api/admin/mail/plans/${months}`, { price: d.price.trim() === '' ? null : Number(d.price), is_active: d.active });
+      await adminApi('PATCH', `/api/admin/mail/plans/${plan.id}`, {
+        name: d.name.trim(), months: Number(d.months), price: d.price.trim() === '' ? null : Number(d.price),
+        is_active: d.active, is_complimentary: d.comp,
+      });
       await onChanged();
-      setEdits((e) => { const n = { ...e }; delete n[months]; return n; });
-      say('ok', `${planLabel(months)} plan saved.`);
+      setEdits((e) => { const n = { ...e }; delete n[plan.id]; return n; });
+      say('ok', `${d.name.trim()} saved.`);
     } catch (e) {
       say('err', e instanceof Error ? e.message : 'Could not save the plan.');
     } finally {
       setSavingPlan(null);
     }
   };
+
+  const addPlan = async () => {
+    const problem = planProblem(newPlan.name ?? '', newPlan.months ?? '', newPlan.price ?? '');
+    if (problem) return say('err', problem);
+    setAddingPlan(true);
+    try {
+      await adminApi('POST', '/api/admin/mail/plans', {
+        name: (newPlan.name ?? '').trim(), months: Number(newPlan.months),
+        price: (newPlan.price ?? '').trim() === '' ? null : Number(newPlan.price),
+        is_complimentary: newPlan.is_complimentary === true,
+      });
+      await onChanged();
+      setNewPlan({ name: '', months: '12', price: '', is_complimentary: false });
+      say('ok', `${(newPlan.name ?? '').trim()} added. It now appears in the plan dropdowns.`);
+    } catch (e) {
+      say('err', e instanceof Error ? e.message : 'Could not add the plan.');
+    } finally {
+      setAddingPlan(false);
+    }
+  };
+
+  const deletePlan = async (plan: MailPlan) => {
+    if (!window.confirm(`Delete the "${plan.name}" plan? This cannot be undone.`)) return;
+    setSavingPlan(plan.id);
+    try {
+      await adminApi('DELETE', `/api/admin/mail/plans/${plan.id}`);
+      await onChanged();
+      say('ok', `${plan.name} deleted.`);
+    } catch (e) {
+      say('err', e instanceof Error ? e.message : 'Could not delete the plan.');
+    } finally {
+      setSavingPlan(null);
+    }
+  };
+
+  const sortedPlans = [...data.plans].sort((a, b) => a.months - b.months || a.name.localeCompare(b.name));
+  const planUse = (id: string) => ({
+    subs: data.subscribers.filter((s) => s.plan_id === id).length,
+    pays: data.payments.filter((p) => p.plan_id === id).length,
+  });
 
   const activeSubs = data.subscribers.filter((s) => s.status !== 'cancelled');
 
@@ -166,32 +228,88 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
       <div className={styles.section}>
         <div className={styles.sectionLabel}>Plans and prices</div>
         <span className={styles.hint}>
-          What you charge for each plan, in S$ for the whole plan. It prefills the amount when you record a payment; it does not change
-          any subscriber&apos;s price per issue.
+          Every plan here appears in the same dropdowns, when you record a payment and on a subscriber. The price is for the whole plan, in S$,
+          and only prefills the amount; it does not change a subscriber&apos;s price per issue. Tick &quot;No payment needed&quot; for
+          Friends &amp; family: those subscribers are never chased and always get their postcard.
         </span>
-        {PLAN_MONTHS.map((m) => {
-          const d = planDraft(m);
-          const per = d.price.trim() !== '' && Number(d.price) >= 0 ? Number(d.price) / m : null;
-          return (
-            <div key={m} className={styles.planRow}>
-              <span className={styles.planName}>{planLabel(m)}</span>
-              <label className={styles.field}>
-                <span className={styles.planPer}>Price (S$){per !== null ? ` · ${money(per)} a month` : ''}</span>
-                <input type="number" min="0" step="0.01" value={d.price} placeholder="Not set"
-                  onChange={(e) => setEdits((x) => ({ ...x, [m]: { ...x[m], price: e.target.value } }))}
-                  aria-label={`${planLabel(m)} plan price`} />
-              </label>
+        <div className={styles.planList}>
+          {sortedPlans.map((plan) => {
+            const d = planDraft(plan);
+            const use = planUse(plan.id);
+            const per = d.price.trim() !== '' && Number(d.price) >= 0 && Number(d.months) >= 1 ? Number(d.price) / Number(d.months) : null;
+            return (
+              <div key={plan.id} className={styles.planCard}>
+                <label className={`${styles.field} ${styles.fName}`}>Name
+                  <input type="text" value={d.name} maxLength={60} onChange={(e) => editPlan(plan.id, { name: e.target.value })}
+                    aria-label={`${plan.name} plan name`} />
+                </label>
+                <label className={`${styles.field} ${styles.fMonths}`}>Months
+                  <input type="number" min="1" max="120" step="1" value={d.months} onChange={(e) => editPlan(plan.id, { months: e.target.value })}
+                    aria-label={`${plan.name} plan months`} />
+                </label>
+                <label className={`${styles.field} ${styles.fPrice}`}>
+                  <span>Price (S$){per !== null && !d.comp ? <span className={styles.planPer}> · {money(per)} a month</span> : null}</span>
+                  <input type="number" min="0" step="0.01" value={d.price} placeholder="Not set"
+                    onChange={(e) => editPlan(plan.id, { price: e.target.value })} aria-label={`${plan.name} plan price`} />
+                </label>
+                <div className={styles.planFlags}>
+                  <label className={styles.check}>
+                    <input type="checkbox" checked={d.comp} onChange={(e) => editPlan(plan.id, { is_complimentary: e.target.checked })}
+                      aria-label={`${plan.name} no payment needed`} />
+                    <span>No payment needed</span>
+                  </label>
+                  <label className={styles.check}>
+                    <input type="checkbox" checked={d.active} onChange={(e) => editPlan(plan.id, { is_active: e.target.checked })}
+                      aria-label={`${plan.name} offered`} />
+                    <span>Offered</span>
+                  </label>
+                </div>
+                <div className={styles.planActions}>
+                  <button type="button" className={styles.btn} onClick={() => savePlan(plan)} disabled={!d.dirty || savingPlan === plan.id}
+                    aria-label={`Save ${plan.name}`}>
+                    {savingPlan === plan.id ? 'Saving…' : 'Save'}
+                  </button>
+                  {use.subs === 0 && use.pays === 0 && (
+                    <button type="button" className={styles.btnDanger} onClick={() => deletePlan(plan)} disabled={savingPlan === plan.id}
+                      aria-label={`Delete ${plan.name}`}>Delete</button>
+                  )}
+                </div>
+                {(use.subs > 0 || use.pays > 0) && (
+                  <span className={styles.planUse}>
+                    Used by {use.subs} subscriber{use.subs === 1 ? '' : 's'} and {use.pays} payment{use.pays === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+
+          <div className={`${styles.planCard} ${styles.planNew}`} role="group" aria-label="Add a plan">
+            <label className={`${styles.field} ${styles.fName}`}>New plan name
+              <input type="text" value={newPlan.name ?? ''} maxLength={60} placeholder="For example: Friends & family"
+                onChange={(e) => setNewPlan((x) => ({ ...x, name: e.target.value }))} />
+            </label>
+            <label className={`${styles.field} ${styles.fMonths}`}>Months
+              <input type="number" min="1" max="120" step="1" value={newPlan.months ?? ''}
+                onChange={(e) => setNewPlan((x) => ({ ...x, months: e.target.value }))} aria-label="New plan months" />
+            </label>
+            <label className={`${styles.field} ${styles.fPrice}`}>Price (S$)
+              <input type="number" min="0" step="0.01" value={newPlan.price ?? ''} placeholder="Not set"
+                onChange={(e) => setNewPlan((x) => ({ ...x, price: e.target.value }))} aria-label="New plan price" />
+            </label>
+            <div className={styles.planFlags}>
               <label className={styles.check}>
-                <input type="checkbox" checked={d.active}
-                  onChange={(e) => setEdits((x) => ({ ...x, [m]: { ...x[m], is_active: e.target.checked } }))} />
-                <span>Offered</span>
+                <input type="checkbox" checked={newPlan.is_complimentary === true}
+                  onChange={(e) => setNewPlan((x) => ({ ...x, is_complimentary: e.target.checked }))} aria-label="New plan no payment needed" />
+                <span>No payment needed</span>
               </label>
-              <button type="button" className={styles.btn} onClick={() => savePlan(m)} disabled={!d.dirty || savingPlan === m}>
-                {savingPlan === m ? 'Saving…' : 'Save'}
+            </div>
+            <div className={styles.planActions}>
+              <button type="button" className={styles.btnPrimarySm} onClick={addPlan} disabled={addingPlan}>
+                {addingPlan ? 'Adding…' : '+ Add plan'}
               </button>
             </div>
-          );
-        })}
+          </div>
+        </div>
       </div>
 
       {/* ── Who needs to pay ── */}
@@ -216,7 +334,7 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
                     <td>{status.paidThrough ? month(status.paidThrough) : '—'}</td>
                     <td>{month(status.nextUnpaid)}</td>
                     <td>
-                      {sub.plan_months ? planLabel(sub.plan_months) : '—'}
+                      {planOf(sub, data.plans)?.name ?? '—'}
                       {sub.preferred_method && <div className={styles.addr}>{METHOD_LABEL[sub.preferred_method]}</div>}
                     </td>
                     <td>
@@ -265,7 +383,7 @@ export default function AdminPayments({ data, say, onChanged, onOpenSubscriber }
                           : 'Unknown'}
                         {s?.payment_ref && <div className={styles.addr}>{s.payment_ref}</div>}
                       </td>
-                      <td>{planLabel(p.plan_months)}</td>
+                      <td><PlanCell payment={p} plans={data.plans} /></td>
                       <td>{coverageText(p)}</td>
                       <td>
                         {METHOD_LABEL[p.method]}

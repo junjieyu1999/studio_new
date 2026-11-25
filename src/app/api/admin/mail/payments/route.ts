@@ -1,5 +1,7 @@
 // POST /api/admin/mail/payments — record a payment from a subscriber.
 //
+// A payment covers `plan_months` months starting at `period_start`. `plan_id` says which plan it was
+// recorded under (omit or null for a one-off "Custom" length); `plan_months` is what counts.
 // A payment covers `plan_months` months starting at `period_start`. If those months overlap
 // months the subscriber has already paid for, the request is refused (409) unless the caller
 // sends `confirm_overlap: true`, so a payment is never double-counted by accident.
@@ -47,6 +49,13 @@ export async function POST(req: NextRequest) {
       .from('mail_subscribers').select('id').eq('id', subscriberId).maybeSingle();
     if (subErr) throw subErr;
     if (!sub) return NextResponse.json({ error: 'Subscriber not found.' }, { status: 404 });
+
+    if (typeof d.plan_id === 'string') {
+      const { data: plan, error: planErr } = await admin
+        .from('mail_plans').select('id').eq('id', d.plan_id).maybeSingle();
+      if (planErr) throw planErr;
+      if (!plan) return NextResponse.json({ error: 'That plan no longer exists. Reload the page and choose again.' }, { status: 400 });
+    }
 
     if (!confirmOverlap) {
       const { data: existing, error: exErr } = await admin

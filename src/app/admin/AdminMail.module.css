@@ -190,10 +190,12 @@
   border-bottom: 1px solid var(--abo);
 }
 
-.grid2, .grid3, .grid4 { display: grid; gap: 0.9rem; }
+.grid2, .grid3, .grid4, .gridPay { display: grid; gap: 0.9rem; }
 .grid2 { grid-template-columns: repeat(2, 1fr); }
 .grid3 { grid-template-columns: repeat(3, 1fr); }
 .grid4 { grid-template-columns: repeat(4, 1fr); }
+.gridPay { grid-template-columns: 2.2fr 1fr 1fr 1fr; }   /* plan names are long, so the first column is wider */
+.gridPay > .field { min-width: 0; }
 
 .field {
   display: flex;
@@ -354,11 +356,11 @@
 @media (max-width: 960px) {
   .split { grid-template-columns: 1fr; }
   .list { position: static; max-height: 320px; }
-  .grid3, .grid4 { grid-template-columns: repeat(2, 1fr); }
+  .grid3, .grid4, .gridPay { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
   .page { padding: 1rem 0.75rem 3rem; }
-  .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+  .grid2, .grid3, .grid4, .gridPay { grid-template-columns: 1fr; }
   .headActions { width: 100%; }
   .headActions > * { flex: 1; }
   .statsMoney { margin-left: 0; width: 100%; }
@@ -444,13 +446,18 @@
 .tileValue { font-size: 1.5rem; font-weight: 300; margin-top: 0.25rem; }
 .tileSub { font-size: 0.7rem; color: var(--am); margin-top: 0.15rem; line-height: 1.5; }
 
-.planRow { display: grid; grid-template-columns: 7rem minmax(0, 15rem) auto auto; justify-content: start; gap: 0.75rem 1.25rem; align-items: end; }
-.planRow .planName { padding-bottom: 0.55rem; }
-.planName { font-size: 0.85rem; }
+.planList { display: flex; flex-direction: column; gap: 0.7rem; }
+.planCard { display: flex; flex-wrap: wrap; gap: 0.7rem 1rem; align-items: flex-end; padding: 0.8rem 0.9rem; border: 1px solid var(--abo); border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.35); }
+.planCard .fName { flex: 2 1 13rem; min-width: 0; }
+.planCard .fMonths { flex: 0 0 6rem; }
+.planCard .fPrice { flex: 1 1 9rem; min-width: 0; }
+.planFlags { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.1rem; padding-bottom: 0.45rem; }
+.planFlags .check { align-items: center; }
+.planFlags .check input { margin-top: 0; }
+.planActions { display: flex; gap: 0.5rem; padding-bottom: 0.1rem; min-width: 9.5rem; justify-content: flex-end; }
 .planPer { font-size: 0.7rem; color: var(--am); }
-@media (max-width: 720px) {
-  .planRow { grid-template-columns: 1fr 1fr; }
-}
+.planUse { flex-basis: 100%; font-size: 0.7rem; color: var(--am); margin-top: -0.2rem; }
+.planNew { border-style: dashed; }
 .rowChips { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.3rem; }
 .payPage { display: flex; flex-direction: column; gap: 1.5rem; }
 .linkBtn {

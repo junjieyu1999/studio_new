@@ -49,6 +49,14 @@ export async function GET(req: NextRequest) {
       else throw err;
     }
 
+    // migration_custom_plans.sql gives every plan an id. Plans without one mean it has not been run
+    // yet, so show the same "run the migration" notice instead of a half-working screen.
+    if (!paymentsSetupNeeded && plans.some((p) => !(p as { id?: unknown }).id)) {
+      payments = [];
+      plans = [];
+      paymentsSetupNeeded = true;
+    }
+
     return NextResponse.json(
       { subscribers, issues, shipments, payments, plans, paymentsSetupNeeded },
       { headers: { 'Cache-Control': 'no-store' } }
