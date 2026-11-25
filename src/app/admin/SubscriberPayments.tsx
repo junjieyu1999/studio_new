@@ -8,7 +8,7 @@ import {
   type MailPayment, type MailPlan, type MailSubscriber,
   formatMonth, money,
 } from '@/lib/mail';
-import { METHOD_LABEL, lastMonthCovered, payStatus, planLabel } from '@/lib/mail-payments';
+import { METHOD_LABEL, lastMonthCovered, monthsLabel, payStatus, paymentPlanName, planOf } from '@/lib/mail-payments';
 import { adminApi } from '@/lib/admin-fetch';
 import RecordPaymentForm from './RecordPaymentForm';
 import PayBadge from './PayBadge';
@@ -32,6 +32,18 @@ export function coverageText(p: Pick<MailPayment, 'period_start' | 'plan_months'
   return start === end ? month(start) : `${month(start)} – ${month(end)}`;
 }
 
+/** The plan a payment was recorded under, with its length underneath when the name does not already say it. */
+export function PlanCell({ payment, plans }: { payment: Pick<MailPayment, 'plan_id' | 'plan_months'>; plans: MailPlan[] }) {
+  const name = paymentPlanName(payment, plans);
+  const len = monthsLabel(payment.plan_months);
+  return (
+    <>
+      {name}
+      {name.toLowerCase() !== len && <div className={styles.addr}>{len}</div>}
+    </>
+  );
+}
+
 export default function SubscriberPayments({ subscriber, payments, allPayments, plans, setupNeeded, onChanged, say }: Props) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState('');
@@ -41,13 +53,13 @@ export default function SubscriberPayments({ subscriber, payments, allPayments, 
       <div className={styles.section}>
         <div className={styles.sectionLabel}>Payments</div>
         <p className={styles.hintWarn}>
-          Payment tracking is not set up yet. In the Supabase SQL Editor, run <code>supabase/migration_payments.sql</code>, then reload this page.
+          Payment tracking is not set up yet. In the Supabase SQL Editor, run <code>supabase/migration_payments.sql</code> and then <code>supabase/migration_custom_plans.sql</code>, then reload this page.
         </p>
       </div>
     );
   }
 
-  const status = payStatus(subscriber, payments);
+  const status = payStatus(subscriber, payments, undefined, plans);
   const sorted = [...payments].sort((a, b) =>
     b.paid_on.localeCompare(a.paid_on) || b.created_at.localeCompare(a.created_at));
 
@@ -99,7 +111,9 @@ export default function SubscriberPayments({ subscriber, payments, allPayments, 
       <div className={styles.paySummary}>
         <PayBadge status={status} />
         <span className={styles.payLine}>
-          {status.state === 'free' && 'No payment needed (price per issue is S$0).'}
+          {status.state === 'free' && (planOf(subscriber, plans)?.is_complimentary
+            ? `No payment needed (on the ${planOf(subscriber, plans)?.name} plan).`
+            : 'No payment needed (price per issue is S$0).')}
           {status.state !== 'free' && status.paidThrough && <>Paid through <strong>{month(status.paidThrough)}</strong>. </>}
           {status.state !== 'free' && !status.paidThrough && 'Nothing paid yet. '}
           {status.state !== 'free' && <>Next month to collect: <strong>{month(status.nextUnpaid)}</strong>.</>}
@@ -143,7 +157,7 @@ export default function SubscriberPayments({ subscriber, payments, allPayments, 
               {sorted.map((p) => (
                 <tr key={p.id} className={p.status === 'refunded' ? styles.dim : undefined}>
                   <td>{p.paid_on}</td>
-                  <td>{planLabel(p.plan_months)}</td>
+                  <td><PlanCell payment={p} plans={plans} /></td>
                   <td>{coverageText(p)}</td>
                   <td>
                     {METHOD_LABEL[p.method]}

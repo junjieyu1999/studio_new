@@ -8,8 +8,8 @@
 //   Refunded payments cover nothing and count as no money.
 
 import {
-  addMonths, todaySG,
-  type MailPayment, type MailSubscriber, type PaymentMethod,
+  addMonths, money, todaySG,
+  type MailPayment, type MailPlan, type MailSubscriber, type PaymentMethod,
 } from './mail';
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -19,7 +19,42 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   other: 'Other',
 };
 
-export const planLabel = (months: number): string => `${months} months`;
+export const monthsLabel = (months: number): string => `${months} month${months === 1 ? '' : 's'}`;
+
+/** The plan a subscriber chose, if it still exists. */
+export const planOf = (sub: Pick<MailSubscriber, 'plan_id'>, plans: MailPlan[]): MailPlan | undefined =>
+  sub.plan_id ? plans.find((p) => p.id === sub.plan_id) : undefined;
+
+/** Nothing to collect: price per issue is 0, or they are on a "no payment needed" plan. */
+export const isComplimentary = (sub: Pick<MailSubscriber, 'price_per_issue' | 'plan_id'>, plans: MailPlan[]): boolean =>
+  Number(sub.price_per_issue) === 0 || planOf(sub, plans)?.is_complimentary === true;
+
+/**
+ * Name of the plan a payment was recorded under. A payment with no plan (a one-off length, or one
+ * recorded before plans could be linked) shows the standard "N months" plan when its length matches,
+ * otherwise 'Custom'.
+ */
+export const paymentPlanName = (p: Pick<MailPayment, 'plan_id' | 'plan_months'>, plans: MailPlan[]): string =>
+  (p.plan_id ? plans.find((x) => x.id === p.plan_id)?.name : undefined)
+  ?? plans.find((x) => !x.is_complimentary && x.name.trim().toLowerCase() === monthsLabel(p.plan_months))?.name
+  ?? 'Custom';
+
+/** How a plan reads in a dropdown: 'Friends & family · no payment needed', '6 months · S$30.00', 'Student · 6 months'. */
+export function planOptionLabel(plan: MailPlan, withPrice = true): string {
+  const len = monthsLabel(plan.months);
+  if (plan.is_complimentary) return `${plan.name} · no payment needed`;
+  const parts = [plan.name];
+  if (plan.name.trim().toLowerCase() !== len) parts.push(len);
+  if (withPrice && plan.price !== null) parts.push(money(plan.price));
+  return parts.join(' · ');
+}
+
+/** Plans for a dropdown: offered ones by length then name, plus `keepId` even if it is no longer offered. */
+export function planChoices(plans: MailPlan[], keepId?: string | null): MailPlan[] {
+  return plans
+    .filter((p) => p.is_active || p.id === keepId)
+    .sort((a, b) => a.months - b.months || a.name.localeCompare(b.name));
+}
 
 /** Current month in Singapore as 'YYYY-MM'. */
 export const currentMonthSG = (): string => todaySG().slice(0, 7);
@@ -36,9 +71,11 @@ export function paymentCovers(p: MailPayment, ym: string): boolean {
   return ym >= start && ym <= lastMonthCovered(p);
 }
 
-/** Is the subscriber covered for 'YYYY-MM'? Free subscribers (price 0) always are. */
-export function isCovered(sub: Pick<MailSubscriber, 'price_per_issue'>, payments: MailPayment[], ym: string): boolean {
-  if (Number(sub.price_per_issue) === 0) return true;
+/** Is the subscriber covered for 'YYYY-MM'? Free subscribers (price 0, or a no-payment-needed plan) always are. */
+export function isCovered(
+  sub: Pick<MailSubscriber, 'price_per_issue' | 'plan_id'>, payments: MailPayment[], ym: string, plans: MailPlan[] = [],
+): boolean {
+  if (isComplimentary(sub, plans)) return true;
   return payments.some((p) => paymentCovers(p, ym));
 }
 
@@ -64,7 +101,7 @@ export function paidThrough(payments: MailPayment[]): string | null {
 }
 
 export type PayState =
-  | 'free'       // price per issue is 0 — nothing to collect
+  | 'free'       // price per issue is 0, or on a no-payment-needed plan — nothing to collect
   | 'paid'       // covered this month and next
   | 'renew'      // covered this month, but NOT next month — renewal due
   | 'lapsed'     // not covered this month, has paid before
@@ -79,13 +116,14 @@ export interface PayStatus {
 
 /** Where one subscriber stands right now. `payments` must be THAT subscriber's payments. */
 export function payStatus(
-  sub: Pick<MailSubscriber, 'price_per_issue'>,
+  sub: Pick<MailSubscriber, 'price_per_issue' | 'plan_id'>,
   payments: MailPayment[],
   nowYm: string = currentMonthSG(),
+  plans: MailPlan[] = [],
 ): PayStatus {
   const through = paidThrough(payments);
   const nextUnpaid = firstUncoveredMonth(payments, nowYm);
-  if (Number(sub.price_per_issue) === 0) {
+  if (isComplimentary(sub, plans)) {
     return { state: 'free', label: 'Free', paidThrough: through, nextUnpaid };
   }
   const coveredNow = payments.some((p) => paymentCovers(p, nowYm));

@@ -90,7 +90,7 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
       const renewing: string[] = [];
       for (const s of mail.subscribers) {
         if (s.status !== 'active') continue;
-        const st = payStatus(s, by.get(s.id) ?? [], thisMonth).state;
+        const st = payStatus(s, by.get(s.id) ?? [], thisMonth, mail.plans).state;
         if (st === 'lapsed' || st === 'unpaid') lapsed.push(s.name);
         else if (st === 'renew') renewing.push(s.name);
       }

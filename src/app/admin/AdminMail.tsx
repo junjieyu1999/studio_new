@@ -9,11 +9,11 @@ import Image from 'next/image';
 import {
   type MailData, type MailIssue, type MailShipment, type MailSubscriber,
   type IssueStatus, type PaymentMethod, type ShipmentStatus, type SubscriberStatus,
-  ISSUE_STATUSES, PAYMENT_METHODS, PLAN_MONTHS, SHIPMENT_STATUSES, SUBSCRIBER_STATUSES,
+  ISSUE_STATUSES, PAYMENT_METHODS, SHIPMENT_STATUSES, SUBSCRIBER_STATUSES,
   addMonths, addressLines, formatMonth, money, shipmentMoney, todaySG,
 } from '@/lib/mail';
 import {
-  METHOD_LABEL, isCovered, payStatus, paymentsBySubscriber, planLabel,
+  METHOD_LABEL, isCovered, payStatus, paymentsBySubscriber, planChoices, planOptionLabel,
 } from '@/lib/mail-payments';
 import { adminApi } from '@/lib/admin-fetch';
 import AdminPayments from './AdminPayments';
@@ -104,7 +104,7 @@ type SubForm = {
   postal_code: string; country: string;
   status: SubscriberStatus; price_per_issue: string;
   source: string; notes: string; joined_on: string;
-  plan_months: string;                      // '' (none) or '3' | '6' | '12'
+  plan_id: string;                          // '' (none) or the id of one of your plans
   preferred_method: '' | PaymentMethod;
 };
 
@@ -114,7 +114,7 @@ const blankSub = (): SubForm => ({
   postal_code: '', country: 'Singapore',
   status: 'active', price_per_issue: '0',
   source: '', notes: '', joined_on: todaySG(),
-  plan_months: '', preferred_method: '',
+  plan_id: '', preferred_method: '',
 });
 
 function subToForm(s: MailSubscriber): SubForm {
@@ -125,7 +125,7 @@ function subToForm(s: MailSubscriber): SubForm {
     postal_code: s.postal_code ?? '', country: s.country,
     status: s.status, price_per_issue: String(s.price_per_issue),
     source: s.source ?? '', notes: s.notes ?? '', joined_on: s.joined_on,
-    plan_months: s.plan_months ? String(s.plan_months) : '',
+    plan_id: s.plan_id ?? '',
     preferred_method: s.preferred_method ?? '',
   };
 }
@@ -156,7 +156,7 @@ export default function AdminMail({ data, loading, error, onChanged }: Props) {
     const by = paymentsBySubscriber(data.payments);
     return data.subscribers.filter((s) => {
       if (s.status !== 'active') return false;
-      const st = payStatus(s, by.get(s.id) ?? []).state;
+      const st = payStatus(s, by.get(s.id) ?? [], undefined, data.plans).state;
       return st === 'lapsed' || st === 'unpaid' || st === 'renew';
     }).length;
   })();
@@ -228,8 +228,8 @@ function IssuesView({ data, say, onChanged }: ViewProps) {
     const ym = selected.issue_month.slice(0, 7);
     const have = new Set(shipments.map((sh) => sh.subscriber_id));
     const by = paymentsBySubscriber(data.payments);
-    return data.subscribers.filter((sub) => sub.status === 'active' && !have.has(sub.id) && !isCovered(sub, by.get(sub.id) ?? [], ym));
-  }, [selected, shipments, data.payments, data.subscribers, data.paymentsSetupNeeded]);
+    return data.subscribers.filter((sub) => sub.status === 'active' && !have.has(sub.id) && !isCovered(sub, by.get(sub.id) ?? [], ym, data.plans));
+  }, [selected, shipments, data.payments, data.subscribers, data.plans, data.paymentsSetupNeeded]);
 
   const counts = (issueId: string) => {
     const list = data.shipments.filter((s) => s.issue_id === issueId);
@@ -716,7 +716,7 @@ function SubscribersView({ data, say, onChanged, initialId }: ViewProps & { init
         ...(form.joined_on ? { joined_on: form.joined_on } : {}),
         // Only sent once payment tracking is set up, so saving still works before the migration is run.
         ...(data.paymentsSetupNeeded ? {} : {
-          plan_months: form.plan_months === '' ? null : Number(form.plan_months),
+          plan_id: form.plan_id === '' ? null : form.plan_id,
           preferred_method: form.preferred_method === '' ? null : form.preferred_method,
         }),
       };
@@ -778,7 +778,7 @@ function SubscribersView({ data, say, onChanged, initialId }: ViewProps & { init
               <span className={styles.rowMeta}>{s.city ? `${s.city}, ` : ''}{s.country} · {s.status}</span>
               {!data.paymentsSetupNeeded && s.status === 'active' && (
                 <span className={styles.rowChips}>
-                  <PayBadge status={payStatus(s, paysBySub.get(s.id) ?? [])} />
+                  <PayBadge status={payStatus(s, paysBySub.get(s.id) ?? [], undefined, data.plans)} />
                 </span>
               )}
             </span>
@@ -868,11 +868,13 @@ function SubscribersView({ data, say, onChanged, initialId }: ViewProps & { init
               </div>
               <span className={styles.hint}>Only Active subscribers get a postcard when you generate shipments. Use 0 for free.</span>
               {!data.paymentsSetupNeeded && (
-                <div className={styles.grid4}>
+                <div className={styles.grid2}>
                   <label className={styles.field}>Plan they chose
-                    <select value={form.plan_months} onChange={(e) => set('plan_months', e.target.value)}>
+                    <select value={form.plan_id} onChange={(e) => set('plan_id', e.target.value)}>
                       <option value="">Not chosen</option>
-                      {PLAN_MONTHS.map((m) => <option key={m} value={m}>{planLabel(m)}</option>)}
+                      {planChoices(data.plans, form.plan_id).map((p) => (
+                        <option key={p.id} value={p.id}>{planOptionLabel(p, false)}</option>
+                      ))}
                     </select>
                   </label>
                   <label className={styles.field}>Pays by
