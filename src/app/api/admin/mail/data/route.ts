@@ -6,16 +6,16 @@ import { friendlyDbError, isMissingTable } from '@/lib/mail-validation';
 
 const PAGE = 1000; // Supabase returns at most 1000 rows per request, so read in pages.
 
-async function fetchAll(table: string, orderBy: string, ascending: boolean) {
+// `tieBreak` is a unique column used to keep page boundaries stable when many rows share the same
+// `orderBy` value. Pass null for a table whose `orderBy` column is already unique (mail_plans has
+// no `id`: its key is `months`).
+async function fetchAll(table: string, orderBy: string, ascending: boolean, tieBreak: string | null = 'id') {
   const admin = getAdminClient();
   const rows: unknown[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await admin
-      .from(table)
-      .select('*')
-      .order(orderBy, { ascending })
-      .order('id', { ascending: true }) // stable tie-break so pages never overlap
-      .range(from, from + PAGE - 1);
+    let q = admin.from(table).select('*').order(orderBy, { ascending });
+    if (tieBreak) q = q.order(tieBreak, { ascending: true });
+    const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw error;
     rows.push(...(data ?? []));
     if (!data || data.length < PAGE) break;
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     try {
       [payments, plans] = await Promise.all([
         fetchAll('mail_payments', 'paid_on', false),
-        fetchAll('mail_plans', 'months', true),
+        fetchAll('mail_plans', 'months', true, null),
       ]);
     } catch (err) {
       if (isMissingTable(err)) paymentsSetupNeeded = true;
