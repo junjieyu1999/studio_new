@@ -63,8 +63,15 @@ create table if not exists public.mail_plans (
   is_active   boolean       not null default true,     -- untick to stop offering a plan
   updated_at  timestamptz   not null default now()
 );
-insert into public.mail_plans (months) values (3), (6), (12)
-  on conflict (months) do nothing;
+-- (Skipped once migration_custom_plans.sql has been run: plans are then managed in the admin.)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'mail_plans' and column_name = 'id') then
+    insert into public.mail_plans (months) values (3), (6), (12)
+      on conflict (months) do nothing;
+  end if;
+end $$;
 
 -- ── Payments ─────────────────────────────────────────────────────
 create table if not exists public.mail_payments (
@@ -90,9 +97,15 @@ create table if not exists public.mail_payments (
 -- Safe on a fresh install and when re-run. Removes the 1-month plan, clears any subscriber's
 -- chosen 1-month plan, and tightens the checks. If a 1-month PAYMENT was already recorded it stops
 -- with a message instead of changing your payment history.
+-- (Skipped once migration_custom_plans.sql has been run, which allows any length from 1 to 120 months.)
 do $$
 declare legacy int;
 begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'mail_plans' and column_name = 'id') then
+    return;
+  end if;
+
   select count(*) into legacy from public.mail_payments where plan_months = 1;
   if legacy > 0 then
     raise exception 'There are % recorded payment(s) on the old 1-month plan. Delete them or re-record them as a 3, 6 or 12 month plan, then run this file again.', legacy;

@@ -9,7 +9,6 @@ import {
   SUBSCRIBER_STATUSES,
   ISSUE_STATUSES,
   SHIPMENT_STATUSES,
-  PLAN_MONTHS,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
 } from './mail';
@@ -17,7 +16,8 @@ import {
 type Rule =
   | { kind: 'text'; max: number; nullable?: boolean; format?: 'email' | 'slug' | 'currency' }
   | { kind: 'enum'; values: readonly string[]; nullable?: boolean }
-  | { kind: 'int'; values: readonly number[]; nullable?: boolean }   // a whole number from a fixed list
+  | { kind: 'int'; min: number; max: number; nullable?: boolean }    // a whole number in a range
+  | { kind: 'uuid'; nullable?: boolean }
   | { kind: 'number'; min: number; max: number; nullable?: boolean }
   | { kind: 'bool' }
   | { kind: 'date'; nullable?: boolean }
@@ -94,10 +94,16 @@ export function parseBody(body: unknown, schema: Schema, required: string[] = []
       case 'int': {
         if ((raw === null || raw === '') && rule.nullable) { data[key] = null; break; }
         const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
-        if (typeof n !== 'number' || !rule.values.includes(n)) {
-          return { ok: false, error: `${label(key)} must be one of: ${rule.values.join(', ')}.` };
+        if (typeof n !== 'number' || !Number.isInteger(n) || n < rule.min || n > rule.max) {
+          return { ok: false, error: `${label(key)} must be a whole number from ${rule.min} to ${rule.max}.` };
         }
         data[key] = n;
+        break;
+      }
+      case 'uuid': {
+        if ((raw === null || raw === '') && rule.nullable) { data[key] = null; break; }
+        if (typeof raw !== 'string' || !isUuid(raw)) return { ok: false, error: `${label(key)} is not valid.` };
+        data[key] = raw;
         break;
       }
       case 'number': {
@@ -156,7 +162,7 @@ export const SUBSCRIBER_SCHEMA: Schema = {
   source:          { kind: 'text', max: 100, nullable: true },
   notes:           { kind: 'text', max: 2000, nullable: true },
   joined_on:       { kind: 'date' },
-  plan_months:      { kind: 'int',  values: PLAN_MONTHS, nullable: true },
+  plan_id:          { kind: 'uuid', nullable: true },
   preferred_method: { kind: 'enum', values: PAYMENT_METHODS, nullable: true },
 };
 export const SUBSCRIBER_REQUIRED = ['name', 'address_line1'];
@@ -189,12 +195,13 @@ export const SHIPMENT_SCHEMA: Schema = {
   notes:          { kind: 'text', max: 2000, nullable: true },
 };
 
-// ── Payments and plans (field names match supabase/migration_payments.sql) ──
+// ── Payments and plans (field names match supabase/migration_payments.sql and migration_custom_plans.sql) ──
 // `subscriber_id` is checked separately (it must be a real UUID); it can only be set on create.
 export const PAYMENT_SCHEMA: Schema = {
   paid_on:      { kind: 'date' },
   method:       { kind: 'enum', values: PAYMENT_METHODS },
-  plan_months:  { kind: 'int',  values: PLAN_MONTHS },
+  plan_months:  { kind: 'int',  min: 1, max: 120 },
+  plan_id:      { kind: 'uuid', nullable: true },
   period_start: { kind: 'month' },
   amount:       { kind: 'number', min: 0, max: 1000000 },
   currency:     { kind: 'text', max: 3, format: 'currency' },
@@ -209,9 +216,13 @@ export const PAYMENT_REQUIRED = ['paid_on', 'method', 'plan_months', 'period_sta
 export const PAYMENT_EDIT_FIELDS = ['paid_on', 'method', 'amount', 'currency', 'amount_sgd', 'reference', 'status', 'notes'] as const;
 
 export const PLAN_SCHEMA: Schema = {
-  price:     { kind: 'number', min: 0, max: 100000, nullable: true },
-  is_active: { kind: 'bool' },
+  name:             { kind: 'text', max: 60 },
+  months:           { kind: 'int', min: 1, max: 120 },
+  price:            { kind: 'number', min: 0, max: 100000, nullable: true },
+  is_active:        { kind: 'bool' },
+  is_complimentary: { kind: 'bool' },
 };
+export const PLAN_REQUIRED = ['name', 'months'];
 
 /** Row ids come from the URL; make sure they really are UUIDs before querying. */
 export function isUuid(v: string): boolean {
@@ -224,15 +235,23 @@ export function isMissingTable(err: unknown): boolean {
   return code === '42P01' || code === 'PGRST205';
 }
 
+/** True when a column does not exist yet (Postgres 42703; PostgREST PGRST204 for writes). */
+export function isMissingColumn(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  return code === '42703' || code === 'PGRST204';
+}
+
 /** Turns a Postgres/PostgREST error into a message that is safe and useful to show. */
 export function friendlyDbError(err: { code?: string; message?: string }): { message: string; status: number } {
   switch (err.code) {
-    case '23505': return { message: 'That already exists (duplicate).', status: 409 };
+    case '23505': return { message: 'That already exists (duplicate). Plan names must be different from each other.', status: 409 };
     case '23001': // ON DELETE RESTRICT
-    case '23503': return { message: 'This is linked to other records (for example shipments), or points at something that does not exist.', status: 409 };
+    case '23503': return { message: 'This is linked to other records (for example shipments, payments or subscribers), or points at something that does not exist.', status: 409 };
     case '23514': return { message: 'One of the values is outside the allowed range.', status: 400 };
     case '42P01':
-    case 'PGRST205': return { message: 'A snail mail table is missing. In the Supabase SQL Editor, run supabase/migration_snail_mail.sql and then supabase/migration_payments.sql.', status: 500 };
+    case 'PGRST205': return { message: 'A snail mail table is missing. In the Supabase SQL Editor, run supabase/migration_snail_mail.sql, then migration_payments.sql, then migration_custom_plans.sql.', status: 500 };
+    case '42703':
+    case 'PGRST204': return { message: 'The database is missing a column. In the Supabase SQL Editor, run supabase/migration_custom_plans.sql (after migration_payments.sql), then try again.', status: 500 };
     default:      return { message: 'Database error.', status: 500 };
   }
 }

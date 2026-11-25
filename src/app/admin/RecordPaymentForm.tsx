@@ -6,11 +6,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  type MailPayment, type MailPlan, type MailSubscriber, type PaymentMethod, type PlanMonths,
-  PAYMENT_METHODS, PLAN_MONTHS, formatMonth, money, todaySG,
+  type MailPayment, type MailPlan, type MailSubscriber, type PaymentMethod,
+  PAYMENT_METHODS, formatMonth, money, todaySG,
 } from '@/lib/mail';
 import {
-  METHOD_LABEL, currentMonthSG, firstUncoveredMonth, lastMonthCovered, overlappingMonths, planLabel,
+  METHOD_LABEL, currentMonthSG, firstUncoveredMonth, lastMonthCovered, overlappingMonths, planChoices, planOptionLabel,
 } from '@/lib/mail-payments';
 import { adminApi } from '@/lib/admin-fetch';
 import styles from './AdminMail.module.css';
@@ -27,7 +27,8 @@ interface Props {
 
 interface FormState {
   subscriberId: string;
-  plan: string;           // '1' | '3' | '6' | '12'
+  plan: string;           // a plan id, or CUSTOM for a one-off length
+  months: string;         // how many months this payment covers
   start: string;          // 'YYYY-MM'
   method: PaymentMethod;
   paidOn: string;
@@ -38,22 +39,26 @@ interface FormState {
   notes: string;
 }
 
-const planPrice = (plans: MailPlan[], months: number): number | null =>
-  plans.find((p) => p.months === months)?.price ?? null;
+const CUSTOM = 'custom';
+
+/** What to prefill as the amount for a plan: its price, or 0 for a no-payment-needed plan. */
+const planAmount = (plan: MailPlan | undefined): string =>
+  !plan ? '' : plan.price !== null ? String(plan.price) : plan.is_complimentary ? '0' : '';
 
 function initialFor(
   sub: MailSubscriber | undefined, payments: MailPayment[], plans: MailPlan[],
 ): FormState {
-  const months = sub?.plan_months ?? PLAN_MONTHS[0];
+  const chosen = sub?.plan_id ? plans.find((p) => p.id === sub.plan_id) : undefined;
+  const plan = chosen ?? planChoices(plans)[0];
   const mine = sub ? payments.filter((p) => p.subscriber_id === sub.id) : [];
-  const price = planPrice(plans, months);
   return {
     subscriberId: sub?.id ?? '',
-    plan: String(months),
+    plan: plan ? plan.id : CUSTOM,
+    months: plan ? String(plan.months) : '12',
     start: firstUncoveredMonth(mine, currentMonthSG()),
     method: sub?.preferred_method ?? 'paynow',
     paidOn: todaySG(),
-    amount: price === null ? '' : String(price),
+    amount: planAmount(plan),
     currency: 'SGD',
     amountSgd: '',
     reference: '',
@@ -83,20 +88,26 @@ export default function RecordPaymentForm({
 
   const pickPlan = (plan: string) =>
     setF((s) => {
-      const price = planPrice(plans, Number(plan));
-      // Prefill the plan price, but only for SGD and only when the plan has a price set.
-      return { ...s, plan, amount: s.currency === 'SGD' && price !== null ? String(price) : s.amount };
+      if (plan === CUSTOM) return { ...s, plan };            // keep the months and amount typed so far
+      const p = plans.find((x) => x.id === plan);
+      if (!p) return { ...s, plan };
+      // Prefill the length and (for SGD, when the plan has a price) the amount.
+      const amt = planAmount(p);
+      return { ...s, plan, months: String(p.months), amount: s.currency === 'SGD' && amt !== '' ? amt : s.amount };
     });
 
   const foreign = f.currency !== 'SGD';
-  const months = Number(f.plan);
-  const covers = /^\d{4}-\d{2}$/.test(f.start)
-    ? `${formatMonth(`${f.start}-01`, 'short')} – ${formatMonth(`${lastMonthCovered({ period_start: `${f.start}-01`, plan_months: months as PlanMonths })}-01`, 'short')}`
+  const months = Number(f.months);
+  const monthsOk = Number.isInteger(months) && months >= 1 && months <= 120;
+  const covers = monthsOk && /^\d{4}-\d{2}$/.test(f.start)
+    ? `${formatMonth(`${f.start}-01`, 'short')} – ${formatMonth(`${lastMonthCovered({ period_start: `${f.start}-01`, plan_months: months })}-01`, 'short')}`
     : '';
+  const selectedPlan = plans.find((p) => p.id === f.plan);
 
   const save = async () => {
     setFormError('');
     if (!f.subscriberId) return setFormError('Choose a subscriber.');
+    if (!monthsOk) return setFormError('Enter how many months this payment covers (1 to 120).');
     if (!/^\d{4}-\d{2}$/.test(f.start)) return setFormError('Choose the first month this payment covers.');
     if (!f.paidOn) return setFormError('Enter the date you received it.');
     if (f.amount.trim() === '' || !Number.isFinite(Number(f.amount)) || Number(f.amount) < 0) {
@@ -124,6 +135,7 @@ export default function RecordPaymentForm({
         paid_on: f.paidOn,
         method: f.method,
         plan_months: months,
+        plan_id: f.plan === CUSTOM ? null : f.plan,
         period_start: f.start,
         amount: Number(f.amount),
         currency: f.currency.toUpperCase(),
@@ -157,30 +169,37 @@ export default function RecordPaymentForm({
         </label>
       )}
 
-      <div className={styles.grid4}>
+      <div className={styles.gridPay}>
         <label className={styles.field}>Plan
           <select value={f.plan} onChange={(e) => pickPlan(e.target.value)}>
-            {PLAN_MONTHS.map((m) => {
-              const price = planPrice(plans, m);
-              return <option key={m} value={m}>{planLabel(m)}{price !== null ? ` · ${money(price)}` : ''}</option>;
-            })}
+            {planChoices(plans, f.plan).map((p) => (
+              <option key={p.id} value={p.id}>{planOptionLabel(p)}</option>
+            ))}
+            <option value={CUSTOM}>Custom…</option>
           </select>
+        </label>
+        <label className={styles.field}>Months covered
+          <input type="number" min="1" max="120" step="1" value={f.months} onChange={(e) => set('months', e.target.value)} />
         </label>
         <label className={styles.field}>First month covered
           <input type="month" value={f.start} onChange={(e) => set('start', e.target.value)} />
-        </label>
-        <label className={styles.field}>Paid by
-          <select value={f.method} onChange={(e) => set('method', e.target.value as PaymentMethod)}>
-            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
-          </select>
         </label>
         <label className={styles.field}>Date received
           <input type="date" value={f.paidOn} onChange={(e) => set('paidOn', e.target.value)} />
         </label>
       </div>
       {covers && <span className={styles.hint}>Covers {covers}{months > 1 ? ` (${months} postcards)` : ' (1 postcard)'}.</span>}
+      {f.plan === CUSTOM && <span className={styles.hint}>A one-off length, not tied to a plan. Add it under Plans and prices if you will use it again.</span>}
+      {selectedPlan && selectedPlan.price !== null && !selectedPlan.is_complimentary && f.amount !== '' && Number(f.amount) !== selectedPlan.price && f.currency === 'SGD' && (
+        <span className={styles.hint}>The {selectedPlan.name} price is {money(selectedPlan.price)}; you entered a different amount, which is fine.</span>
+      )}
 
       <div className={styles.grid4}>
+        <label className={styles.field}>Paid by
+          <select value={f.method} onChange={(e) => set('method', e.target.value as PaymentMethod)}>
+            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
+          </select>
+        </label>
         <label className={styles.field}>Amount received *
           <input type="number" min="0" step="0.01" value={f.amount} onChange={(e) => set('amount', e.target.value)} />
         </label>
@@ -197,9 +216,6 @@ export default function RecordPaymentForm({
             <input type="number" min="0" step="0.01" value={f.amountSgd} onChange={(e) => set('amountSgd', e.target.value)} />
           </label>
         )}
-        <label className={styles.field}>Their transfer reference
-          <input type="text" value={f.reference} onChange={(e) => set('reference', e.target.value)} autoComplete="off" />
-        </label>
       </div>
       {foreign && (
         <span className={styles.hint}>
@@ -207,6 +223,10 @@ export default function RecordPaymentForm({
           so your totals stay in one currency.
         </span>
       )}
+
+      <label className={styles.field}>Their transfer reference
+        <input type="text" value={f.reference} onChange={(e) => set('reference', e.target.value)} autoComplete="off" />
+      </label>
 
       <label className={styles.field}>Notes
         <textarea rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
