@@ -10,6 +10,7 @@ import {
   type MailData, type MailIssue,
   addMonths, formatMonth, money, shipmentMoney, todaySG,
 } from '@/lib/mail';
+import { payStatus, paymentsBySubscriber, receivedTotal } from '@/lib/mail-payments';
 import styles from './AdminOverview.module.css';
 
 interface Props {
@@ -75,7 +76,35 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
       }
     }
 
-    return { thisMonth, activeSubs, perIssue, revenue, cost, current, upcoming, alerts };
+    // ── Payments (only once migration_payments.sql has been run) ──
+    let cashMonth = 0;
+    let cashTotal = 0;
+    let needPay = 0;
+    if (!mail.paymentsSetupNeeded) {
+      const received = mail.payments.filter((p) => p.status === 'received');
+      cashTotal = receivedTotal(received);
+      cashMonth = receivedTotal(received.filter((p) => p.paid_on.slice(0, 7) === thisMonth));
+
+      const by = paymentsBySubscriber(mail.payments);
+      const lapsed: string[] = [];
+      const renewing: string[] = [];
+      for (const s of mail.subscribers) {
+        if (s.status !== 'active') continue;
+        const st = payStatus(s, by.get(s.id) ?? [], thisMonth).state;
+        if (st === 'lapsed' || st === 'unpaid') lapsed.push(s.name);
+        else if (st === 'renew') renewing.push(s.name);
+      }
+      needPay = lapsed.length + renewing.length;
+      const names = (list: string[]) => list.slice(0, 4).join(', ') + (list.length > 4 ? ` and ${list.length - 4} more` : '');
+      if (lapsed.length > 0) {
+        alerts.push({ level: 'warn', go: 'mail', text: `${lapsed.length} active subscriber${lapsed.length === 1 ? ' has' : 's have'} not paid for ${formatMonth(`${thisMonth}-01`)}: ${names(lapsed)}.` });
+      }
+      if (renewing.length > 0) {
+        alerts.push({ level: 'info', go: 'mail', text: `${renewing.length} renewal${renewing.length === 1 ? '' : 's'} due before next month: ${names(renewing)}.` });
+      }
+    }
+
+    return { thisMonth, activeSubs, perIssue, revenue, cost, current, upcoming, alerts, cashMonth, cashTotal, needPay };
   }, [mail]);
 
   const artCounts = {
@@ -140,6 +169,16 @@ export default function AdminOverview({ artworks, mail, error, loading, onOpenMa
             {view ? `${money(view.revenue)} in · ${money(view.cost)} out` : ''}
           </span>
         </button>
+
+        {mail && !mail.paymentsSetupNeeded && (
+          <button className={styles.card} onClick={onOpenMail}>
+            <span className={styles.cardLabel}>Payments received</span>
+            <span className={styles.cardValue}>{view ? money(view.cashMonth) : '–'}</span>
+            <span className={styles.cardSub}>
+              this month · {view ? money(view.cashTotal) : '–'} in total · {view ? view.needPay : 0} to collect
+            </span>
+          </button>
+        )}
       </div>
 
       <div className={styles.columns}>

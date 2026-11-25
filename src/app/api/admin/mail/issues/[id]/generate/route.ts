@@ -2,6 +2,10 @@
 // Creates one pending shipment for every ACTIVE subscriber who does not already
 // have one for this issue. Safe to run again after new subscribers join.
 //
+// Optional body { only_paid: true } skips active subscribers who have not paid for this issue's
+// month (free subscribers, price 0, always count as paid). Without it everyone active is included,
+// and the response says how many of them were unpaid so the admin can warn about it.
+//
 // Each shipment gets a snapshot of the price and costs at this moment:
 //   price_charged  <- the subscriber's price_per_issue
 //   print_cost     <- the issue's print_cost
@@ -10,21 +14,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { getAdminClient } from '@/lib/supabase-admin';
-import { isUuid, friendlyDbError } from '@/lib/mail-validation';
-import { isLocalCountry } from '@/lib/mail';
+import { isUuid, friendlyDbError, isMissingTable } from '@/lib/mail-validation';
+import { isLocalCountry, type MailPayment } from '@/lib/mail';
+import { paymentCovers } from '@/lib/mail-payments';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: 'Invalid id.' }, { status: 400 });
+  const onlyPaid = ((await req.json().catch(() => null)) as { only_paid?: unknown } | null)?.only_paid === true;
 
   try {
     const admin = getAdminClient();
 
     const { data: issue, error: issueErr } = await admin
       .from('mail_issues')
-      .select('id, print_cost, postage_local, postage_intl, packaging_cost')
+      .select('id, issue_month, print_cost, postage_local, postage_intl, packaging_cost')
       .eq('id', id)
       .maybeSingle();
     if (issueErr) {
@@ -51,10 +57,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (subscribers.length === 0) {
-      return NextResponse.json({ created: 0, skipped: 0, message: 'There are no active subscribers.' });
+      return NextResponse.json({ created: 0, skipped: 0, unpaid: 0, message: 'There are no active subscribers.' });
     }
 
-    const rows = subscribers.map((s) => ({
+    // Who has paid for this issue's month? Needs migration_payments.sql; without it nobody is flagged.
+    const issueYm = String(issue.issue_month).slice(0, 7);
+    const paidIds = new Set<string>();
+    let paymentsReady = true;
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin
+        .from('mail_payments')
+        .select('subscriber_id, plan_months, period_start, status')
+        .eq('status', 'received')
+        .lte('period_start', `${issueYm}-01`)
+        .order('id', { ascending: true })
+        .range(from, from + 999);
+      if (error) {
+        if (isMissingTable(error)) { paymentsReady = false; break; }
+        const f = friendlyDbError(error);
+        return NextResponse.json({ error: f.message }, { status: f.status });
+      }
+      for (const p of (data ?? []) as MailPayment[]) {
+        if (paymentCovers(p, issueYm)) paidIds.add(p.subscriber_id);
+      }
+      if (!data || data.length < 1000) break;
+    }
+    if (onlyPaid && !paymentsReady) {
+      return NextResponse.json({ error: 'Payment tracking is not set up yet. Run supabase/migration_payments.sql first.' }, { status: 400 });
+    }
+    const isPaid = (s: { id: string; price_per_issue: number }) => Number(s.price_per_issue) === 0 || paidIds.has(s.id);
+    const unpaid = paymentsReady ? subscribers.filter((s) => !isPaid(s)).length : 0;
+    const included = onlyPaid ? subscribers.filter(isPaid) : subscribers;
+
+    if (included.length === 0) {
+      return NextResponse.json({ created: 0, skipped: 0, unpaid, message: 'Nobody who is active has paid for this month.' });
+    }
+
+    const rows = included.map((s) => ({
       issue_id: issue.id,
       subscriber_id: s.id,
       price_charged: s.price_per_issue,
@@ -77,7 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       created += data?.length ?? 0;
     }
 
-    return NextResponse.json({ created, skipped: rows.length - created });
+    return NextResponse.json({ created, skipped: rows.length - created, unpaid, left_out: onlyPaid ? subscribers.length - included.length : 0 });
   } catch (err) {
     console.error('generate shipments error:', err);
     return NextResponse.json({ error: 'Could not create shipments.' }, { status: 500 });

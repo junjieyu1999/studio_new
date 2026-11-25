@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { getAdminClient } from '@/lib/supabase-admin';
-import { friendlyDbError } from '@/lib/mail-validation';
+import { friendlyDbError, isMissingTable } from '@/lib/mail-validation';
 
 const PAGE = 1000; // Supabase returns at most 1000 rows per request, so read in pages.
 
@@ -33,8 +33,24 @@ export async function GET(req: NextRequest) {
       fetchAll('mail_issues', 'issue_month', false),
       fetchAll('mail_shipments', 'created_at', true),
     ]);
+
+    // Payments are newer than the rest. If migration_payments.sql has not been run yet, keep the
+    // whole Snail mail tab working and just tell the screen to show a "run the migration" notice.
+    let payments: unknown[] = [];
+    let plans: unknown[] = [];
+    let paymentsSetupNeeded = false;
+    try {
+      [payments, plans] = await Promise.all([
+        fetchAll('mail_payments', 'paid_on', false),
+        fetchAll('mail_plans', 'months', true),
+      ]);
+    } catch (err) {
+      if (isMissingTable(err)) paymentsSetupNeeded = true;
+      else throw err;
+    }
+
     return NextResponse.json(
-      { subscribers, issues, shipments },
+      { subscribers, issues, shipments, payments, plans, paymentsSetupNeeded },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err) {
