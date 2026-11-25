@@ -10,6 +10,14 @@ export const SUBSCRIBER_STATUSES = ['active', 'paused', 'cancelled'] as const;
 export const ISSUE_STATUSES      = ['planning', 'printing', 'ready', 'shipped'] as const;
 export const SHIPMENT_STATUSES   = ['pending', 'printed', 'mailed', 'delivered', 'returned'] as const;
 
+// Payment plans offered (months paid up front) and how people pay. There is no 1-month plan.
+export const PLAN_MONTHS     = [3, 6, 12] as const;
+export const PAYMENT_METHODS = ['paynow', 'revolut', 'bank', 'other'] as const;
+export const PAYMENT_STATUSES = ['received', 'refunded'] as const;
+
+export type PlanMonths = (typeof PLAN_MONTHS)[number];
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type SubscriberStatus = (typeof SUBSCRIBER_STATUSES)[number];
 export type IssueStatus      = (typeof ISSUE_STATUSES)[number];
 export type ShipmentStatus   = (typeof SHIPMENT_STATUSES)[number];
@@ -31,6 +39,33 @@ export interface MailSubscriber {
   source: string | null;
   notes: string | null;
   joined_on: string;
+  created_at: string;
+  // Payment CRM (supabase/migration_payments.sql)
+  payment_ref?: string;                 // code the subscriber writes on their transfer
+  plan_months?: PlanMonths | null;      // the plan they chose
+  preferred_method?: PaymentMethod | null;
+}
+
+export interface MailPlan {
+  months: PlanMonths;
+  price: number | null;                 // S$ for the whole plan; null = not set yet
+  is_active: boolean;
+  updated_at: string;
+}
+
+export interface MailPayment {
+  id: string;
+  subscriber_id: string;
+  paid_on: string;                      // 'YYYY-MM-DD'
+  method: PaymentMethod;
+  plan_months: PlanMonths;
+  period_start: string;                 // first month covered, 'YYYY-MM-01'
+  amount: number;                       // what the customer sent, in `currency`
+  currency: string;                     // 'SGD', 'USD', ...
+  amount_sgd: number;                   // what it is worth to you in S$
+  reference: string | null;
+  status: PaymentStatus;
+  notes: string | null;
   created_at: string;
 }
 
@@ -73,6 +108,10 @@ export interface MailData {
   subscribers: MailSubscriber[];
   issues: MailIssue[];
   shipments: MailShipment[];
+  payments: MailPayment[];
+  plans: MailPlan[];
+  /** true when supabase/migration_payments.sql has not been run yet */
+  paymentsSetupNeeded: boolean;
 }
 
 // What the PUBLIC /postcards page is allowed to know about an issue.

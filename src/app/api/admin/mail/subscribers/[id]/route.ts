@@ -53,7 +53,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       console.error('DELETE subscriber error:', error);
       if (error.code === '23001' || error.code === '23503') { // 23001 = ON DELETE RESTRICT
         return NextResponse.json(
-          { error: 'This subscriber has shipment history, so it cannot be deleted. Set their status to Cancelled instead.' },
+          { error: 'This subscriber has shipment or payment history, so it cannot be deleted. Set their status to Cancelled instead.' },
           { status: 409 }
         );
       }
